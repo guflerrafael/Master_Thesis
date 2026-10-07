@@ -7,16 +7,22 @@ This document serves as a basis for the write up. All notes (more specifically a
 ```
 data/raw/          ignic_ICNF.xlsx, FRP_SEVIRI_PT_2004_2019.mat   (as received, never modified)
 data/processed/    icnf_fires.parquet, seviri_frp.parquet          (src/clean_data.py)
+data/external/     ne_10m_admin_0_countries.zip (country borders, see 2.2)
 outputs/profiling/ ydata-profiling reports in raw/ and processed/  (src/eda.py)
+outputs/           eda_figures_log.txt (numbers printed by src/eda_figures.py)
 figures/           plots                                           (src/timezone_check.py, src/plot_largest_fires.py)
+figures/eda/       descriptive figures 01–09                       (src/eda_figures.py)
 src/               all code
 ```
+
+Environment: Python 3.11, `python -m venv .venv && .venv/bin/pip install -r requirements.txt` (only packages imported by `src/`, pinned).
 
 Run from the repository root, in this order:
 1. `.venv/bin/python src/clean_data.py`: raw → processed parquet (1.3, 1.5)
 2. `.venv/bin/python src/eda.py`: profiling reports (1.6)
 3. `.venv/bin/python src/timezone_check.py`: time zone check (1.4)
 4. `.venv/bin/python src/plot_largest_fires.py`: largest fires in lat–lon–time (2.1)
+5. `.venv/bin/python src/eda_figures.py > outputs/eda_figures_log.txt`: descriptive figures (2.2)
 
 ## 1. Data
 
@@ -174,3 +180,54 @@ Observations:
 - **Overlapping fires are a major problem.** On 2017-10-15 several fires >15,000 ha burned at the same time (Lousã, Arganil, Sertã, Figueira da Foz, Alcobaça, …), so their 40 km windows contain each other's hotspots. Arouca 2016 sits in a region with many simultaneous fires. A matching rule must assign each hotspot to one fire (e.g. by spatio-temporal clustering) before any event can be used as a sample.
 - ICNF end times are often well before the last hotspots (e.g. Sertã 2017-07-23, Tavira) or long after them (Lousã, Arganil). End times are not reliable for cutting sequences; the hotspots themselves should define the end of an event.
 - The map view shows SEVIRI's coarse, irregular pixel grid (~3–5 km), confirming that sub-pixel ignition localisation will be the hard part.
+
+### 2.2 Descriptive figures (2026-10-07)
+
+Script: `src/eda_figures.py`; figures: `figures/eda/01–09`; printed numbers: `outputs/eda_figures_log.txt`.
+
+Setup:
+- `geopandas` installed into `.venv` (added to `requirements.txt`).
+- Country borders: Natural Earth 1:10m Admin 0 – Countries (public domain), downloaded 2026-10-07 from `https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_0_countries.zip` to `data/external/`. The mainland Portugal polygon is the largest part of the Portugal geometry and is also used to decide whether a SEVIRI detection lies in Portugal.
+- Colours: one blue for single series; a single-hue blue (or orange) ramp for magnitudes; at most three categorical colours (blue, orange, aqua), checked for colour-blind separation, with different line styles as a second cue.
+- ICNF fires used in figs. 02, 07–09: start (UTC) between 2004-01-20 and 2019-12-30 and valid coordinates (361,031 fires; 2,311 of them ≥ 100 ha). When `end_utc` is missing, the start time is used as end.
+
+Exploratory ICNF ↔ SEVIRI matching (figs. 07–09 only; **not** the final event matching):
+- Search radius around the ignition point grows with fire size: R = 5 km + 2 · √(A/π), A = burned area in km², capped at 40 km (5.0 km for tiny fires, ~13 km at 1,000 ha, ~30 km at 20,000 ha).
+- Fig. 07: a fire is "detected" if any SEVIRI detection lies within R in [start − 1 h, end + 3 h]. The same test with the fire shifted ±7 days (same place and hour) gives the chance rate of matching an unrelated fire.
+- Figs. 08/09: generous window [start − 1 h, end + 24 h] (ICNF end times are often too early, see 2.1). A detection matching several fires is assigned to the largest one.
+
+| Figure | Content | Main result |
+|---|---|---|
+| 01 `icnf_annual` | Fires and burned area per year, 1980–2023; SEVIRI period shaded | The number of records rose from the 1980s to a maximum in 2005 (41.6k) and has fallen since ~2012. Burned area is dominated by single extreme years: 2017 (540 kha), 2003 (469 kha), 2005 (347 kha). |
+| 02 `icnf_size_distribution` | Share of fires ≥ x (log-log) and share of burned area from fires ≥ x | Heavy-tailed. In 2004–2019 (with coordinates), fires ≥ 100 ha are **0.64 % of fires but 79.5 % of burned area**; fires ≥ 1,000 ha are 0.08 % of fires and 51 % of the area. |
+| 03 `icnf_ignition_map` | Density of all ignition points 2001–2023 (hexbins), and fires ≥ 100 ha sized by area | Ignitions are densest in the north-west (Porto–Braga) and around Lisbon. Large fires concentrate in the centre (Coimbra–Castelo Branco–Leiria), the north-east and the Algarve hills (Monchique, Tavira). Two-thirds of all ignitions and of fires ≥ 100 ha lie north of 40.5° N. |
+| 04 `seviri_temporal` | Detections per year, month, hour (UTC); FRP per hour | 85 % of detections in Jul–Oct, plus a small March peak (4.7 %; winter/spring burning, mostly in the north). Detections peak at 16:00 UTC (minimum 07–08 UTC). Median FRP peaks earlier, at 12:00 UTC (121 MW vs. ~57 MW at night). |
+| 05 `seviri_frp_confidence` | 2D histogram FRP × confidence; share of detections kept per confidence threshold, by FRP | Confidence rises with FRP. A threshold of 50 keeps 97 % of detections but removes most detections below ~15 MW; 70 removes most below ~30 MW; 90 keeps only 32 % overall. A filter therefore cuts exactly the weak, early detections. The dip of the ≥ 90 curve at ~1,000 MW is at the saturation level. |
+| 06 `seviri_pixel_maps` | Detections per SEVIRI pixel; share of each pixel's active days outside Jun–Oct | 8,402 pixels with ≥ 1 detection. **142 "persistent off-season" pixels** (≥ 20 active days, ≥ 50 % of them outside Jun–Oct; 25,366 detections), 93 in Spain: north-west Iberia (Galicia/León, likely winter–spring pasture burning) and a line at ~38.9° N in the Guadiana valley near Badajoz (e.g. one pixel with 112 active days, all off-season; agricultural or industrial sources). 49 in Portugal, mostly in the northern mountains (Minho/Gerês, Trás-os-Montes, Douro) plus a cluster at 40.5° N, −7.5° E; one pixel at 39.44° N, −8.49° E has 49 active days, all off-season. The sources still need checking (e.g. satellite imagery); these pixels are candidates for a mask, but in the north they may be real (pastoral) fires. |
+| 07 `detection_probability` | Share of ICNF fires with a SEVIRI detection, by size class, with 95 % Wilson intervals and the ±7-day chance rate | See table below. **Detection rises above chance from ~1–5 ha and passes 50 % between 10–50 ha and 50–100 ha; from 100 ha on, ≥ 80 % are detected.** For the largest fires the chance rate is also high (big radius, long window, busy fire seasons), so this test alone cannot be used as the matching rule. |
+| 08 `fre_vs_burned_area` | Fire radiative energy (FRE = Σ FRP × 900 s) vs. burned area, per fire (≥ 100 ha) and per year (all detections in mainland Portugal) | Per year: log-log r = **0.97**, so SEVIRI energy tracks burned area very well. Per fire (1,880 of 2,311 fires ≥ 100 ha received detections): r = 0.58, slope ≈ 1.0 (FRE roughly proportional to area) but large scatter (detections missed under cloud/smoke, wrong assignment between neighbouring fires). |
+| 09 `unmatched_hotspots` | SEVIRI detections in mainland Portugal with no ICNF fire within R / the time window: map, share by confidence, share by month | 395,573 detections (70 %) lie in mainland Portugal; **16.9 % of them are unmatched**. Unmatched share falls with confidence (47 % at < 30 → 12 % at 90–100) and is highest in winter (72 % in January vs. 13 % in August). Unmatched detections are spread over the north and centre, plus clusters at the persistent pixels of fig. 06. |
+
+Detection rate by size (fig. 07):
+
+| Burned area [ha] | Fires | Detected [%] | Chance [%] |
+|---|---|---|---|
+| 0.01–0.1 | 131,293 | 1.9 | 1.3 |
+| 0.1–1 | 86,356 | 2.8 | 1.5 |
+| 1–5 | 47,447 | 7.9 | 2.3 |
+| 5–10 | 7,329 | 24.1 | 3.5 |
+| 10–50 | 7,042 | 42.9 | 4.1 |
+| 50–100 | 1,558 | 67.7 | 6.9 |
+| 100–500 | 1,681 | 80.2 | 9.5 |
+| 500–1,000 | 338 | 90.5 | 16.3 |
+| 1,000–5,000 | 252 | 96.0 | 28.6 |
+| ≥ 5,000 | 40 | 97.5 | 56.2 |
+
+New data-quality finding (not changed in cleaning):
+- **Placeholder burned areas:** 17,693 fires have 0 < `burned_area_ha` < 0.001 ha (< 10 m²), with values down to 1e-12 ha (e.g. series of 1e-7 / 1e-8 / 1e-9 in Viana do Castelo 2001 and Leiria 2003). These are codes for "negligible area" rather than measurements. Figs. 02 and 07 start at 0.001 ha / 0.01 ha. Irrelevant for the SEVIRI work (far below the detection limit).
+
+Implications for the next steps:
+- **Minimum fire size:** ~100 ha is a sensible lower limit for labelled events (≥ 80 % detected; 2,311 fires in 2004–2019). Going down to ~10–50 ha would add ~8,600 fires, but less than half of them are detected and the detections are weak.
+- **Confidence:** do not filter on confidence before matching. Low-confidence detections are more often unmatched (artefacts), but they are also the early-stage signal. Check the persistent off-season pixels and mask those that are clearly not wildfires, and decide on confidence later (possibly as a model input).
+- **Spain:** 30 % of all detections lie outside mainland Portugal and have no labels. Keep them as spatial context, but exclude them from labels and from the unmatched statistics.
+- **Neighbouring fires:** per-fire energy is noisy partly because hotspots are wrongly assigned between nearby fires. The final matching should cluster detections in space and time first, then link clusters to ICNF fires.

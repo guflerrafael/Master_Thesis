@@ -1,6 +1,8 @@
 # Master Thesis — Context Document
 
-> Purpose: single source of truth for future work on this project. It consolidates the thesis proposal (`infos.txt`), the supervisor's messages, the two datasets in `data/`, the initial EDA (`eda.py`, `eda_report.html`) and an independent data audit done when this file was written (2026-10-01). Numbers marked **[audit]** were computed directly from the raw files, not copied from the proposal.
+> Purpose: single source of truth for future work on this project. It consolidates the thesis proposal (`infos.txt`), the supervisor's messages, the two datasets in `data/raw/` and an independent data audit done when this file was first written (2026-10-01). Numbers marked **[audit]** were computed directly from the raw files, not copied from the proposal.
+>
+> Last updated 2026-10-07. Status: data cleaned, time zone resolved, first exploration done (see §13). Step-by-step methods log, with every decision and row count: `notes.md`.
 
 ---
 
@@ -46,26 +48,34 @@ Reference cited for motivation: Xu et al., 2025 (DL for wildfire monitoring/mana
 ```
 Master_Thesis/
 ├── data/
-│   ├── FRP_SEVIRI_PT_2004_2019.mat   (3.5 MB)  SEVIRI FRP hotspots
-│   └── ignic_ICNF.xlsx               (51 MB)   official ICNF fire occurrences 1980–2023
-├── eda.py             ydata-profiling script for the Excel file
-├── eda_report.html    its output (2.6 MB, profiling of ignic_ICNF.xlsx only)
-├── infos.txt          proposal outline + supervisor messages
+│   ├── raw/                           as received, never modified
+│   │   ├── FRP_SEVIRI_PT_2004_2019.mat   (3.5 MB)  SEVIRI FRP hotspots
+│   │   └── ignic_ICNF.xlsx               (51 MB)   official ICNF fire occurrences 1980–2023
+│   └── processed/                     written by src/clean_data.py
+│       ├── icnf_fires.parquet
+│       └── seviri_frp.parquet
+├── src/
+│   ├── clean_data.py          raw → processed parquet (cleaning + UTC conversion)
+│   ├── eda.py                 profiling reports, raw and processed
+│   ├── timezone_check.py      ICNF time zone test → figures/timezone_lag.png
+│   └── plot_largest_fires.py  largest fires in lat–lon–time → figures/largest_fires_lat_lon_time.png
+├── outputs/profiling/{raw,processed}/{icnf,seviri}_eda_report.html
+├── figures/
+├── notes.md           methods log (basis for the write-up)
 ├── thesis.md          this file
-├── .venv/             Python 3.11 venv
+├── infos.txt          proposal outline + supervisor messages
+├── requirements.txt
+├── .gitignore         excludes .venv/, __pycache__/, .DS_Store
 └── .vscode/settings.json
 ```
-Not a git repository. No modelling code exists yet.
+Git repository (branch `main`, no remote yet), first commit 2026-10-07. No modelling code exists yet. Reproduce with the four scripts in the order given in `notes.md` §0, run from the repository root.
 
 ### Environment
-Python 3.11 venv with: pandas 2.3.3, numpy 2.3.5, scipy 1.16.3, matplotlib 3.10, seaborn 0.13.2, statsmodels, openpyxl, ydata-profiling 4.18 (+ fg_data_profiling), numba, networkx, phik, PyWavelets. **Not installed:** PyTorch/TensorFlow, scikit-learn, xarray, geopandas, rasterio, netCDF/h5py — needed for the planned work (and `cdsapi` for ERA5-Land).
-
-### `eda.py` (note)
-Only 6 lines: reads `ignic_ICNF.xlsx` and writes a ydata-profiling HTML. The path is relative (`"ignic_ICNF.xlsx"`) and works only when run from inside `data/` (or after editing it to `data/ignic_ICNF.xlsx`); the report then sits wherever it was written. It does **not** touch the `.mat` file and does no cleaning, so the report inherits the data problems listed in §7.
+Python 3.11 venv (`.venv/`, not in git). `requirements.txt` lists only what `src/` imports: pandas 2.3.3, numpy 2.3.5, scipy 1.16.3, openpyxl 3.1.5, pyarrow 25.0.1, matplotlib 3.10.0, fg-data-profiling 4.19.1 (imported as `data_profiling`). The venv also contains seaborn, statsmodels, ydata-profiling and others not used by the code. **Not installed:** PyTorch/TensorFlow, scikit-learn, xarray, geopandas, rasterio, netCDF/h5py — needed for the planned work (and `cdsapi` for ERA5-Land).
 
 ## 6. Datasets
 
-### 6.1 SEVIRI FRP — `data/FRP_SEVIRI_PT_2004_2019.mat`
+### 6.1 SEVIRI FRP — `data/raw/FRP_SEVIRI_PT_2004_2019.mat`
 MATLAB 5.0 file (created 2026-07-22, readable with `scipy.io.loadmat`). Five 1-D arrays of length **569,019** — each row is one *hotspot detection* (pixel × timestamp), **not** a gridded image:
 
 | Variable | Type | Notes |
@@ -86,7 +96,7 @@ Facts **[audit]**:
 - Seasonality: Aug 255.5k, Jul 95.6k, Sep 76.4k, Oct 57.7k (≈ 90 % Jul–Oct); diurnal peak 14–18 h UTC (min ≈ 07–08 h).
 - **Confidence** is strongly coupled with FRP: ≥30: 99.8 %, ≥50: 97.4 %, ≥70: 81.5 %, ≥80: 61.9 %, ≥90: 32.0 %. Low-confidence rows have FRP ≈ 20–35 MW; confidence 100 has mean FRP ≈ 371 MW. Thresholding on confidence will preferentially remove the weak, early-stage detections that matter most for ignition localisation — a key design trade-off.
 
-### 6.2 ICNF fire occurrences — `data/ignic_ICNF.xlsx`
+### 6.2 ICNF fire occurrences — `data/raw/ignic_ICNF.xlsx`
 One sheet (`Sheet1`), **813,384 rows × 9 columns** (the supervisor's "line 330415" = first coordinate row, consistent with the audit):
 
 | Column | Meaning |
@@ -111,6 +121,8 @@ Facts **[audit]**:
 
 ## 7. Data-quality issues to fix before modelling [audit]
 
+> **Status 2026-10-07:** handled in `src/clean_data.py` (details in `notes.md` §1.3): duplicates dropped, invalid end times and coordinates set to missing and flagged, text normalised, times converted to UTC. Additions found during cleaning: the 1994 `DataFim` < `Data` rows have end date 1970-01-01 (only the time of day survived); the 23 repeated Atlantic points are 2014–2015 fires in Porto, Lisboa and Setúbal; `Dicofre` is a municipality code (1-to-1 with `Concelho`), not a parish code. Still open: coordinates inside the bounding box but in the wrong place, no SEVIRI confidence filter, Spain not masked.
+
 ICNF:
 - **Duplicated/missing end times:** `DataFim` null for 1,651 rows; one `DataFim` = 1900-01-01 sentinel; **20,932 rows have `DataFim < Data`** (19,376 of them in 1994 alone, the rest scattered over 1980–2000, **none after 2000** — so irrelevant for the 2004–2019 overlap; `DataFim` is apparently misparsed there, and mean duration is −5,143 h unless filtered).
 - `Data` null for 6 rows (all 1993); `AA` null for 1 row; **21,339 rows with AA ≤ 0**.
@@ -125,6 +137,8 @@ SEVIRI:
 
 ## 8. Preliminary matching result (quick sanity check, not the final method)
 
+> **Update 2026-10-07:** the "first detection ~1 h before start" result below was the time zone. ICNF times are Portuguese local time (§13); after converting to UTC, SEVIRI first sees a fire ~10–20 min *after* the reported start.
+
 For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SEVIRI detections within **15 km** of the ICNF ignition point and within **[Data − 6 h, DataFim + 6 h]**:
 - **98.3 %** have at least one matching hotspot (mean ≈ 633 detections per event, median 344) → large fires are indeed visible, as the supervisor expected.
 - Nearest-in-time first detection: median distance to the ICNF point ≈ **4.5 km** (mean 5.7 km, ≤ 15 km by construction); median first-detection time ≈ **1 h before** the reported start (IQR −3.3 h to −0.5 h). Negative lags mean the first hotspot in the window occurs *before* the official start: likely due to time-zone offset, unreliable ICNF start times, or contamination by neighbouring fires / the 6 h pre-window. **This must be disentangled** (check UTC vs local shift: a +1 h or +2 h offset would explain the median).
@@ -133,7 +147,7 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 ## 9. Key challenges and open questions
 
 1. **Label vs. observation mismatch.** ICNF gives point + start/end; SEVIRI gives hotspot clouds. Need a rigorous event ↔ hotspot-cluster matching rule (space buffer, time window, confidence filter, handling of overlapping fires; e.g. 2017-10-15 had many simultaneous large fires).
-2. **Time zone** of ICNF `Data` and of SEVIRI `TIME` (assumed UTC).
+2. ~~**Time zone** of ICNF `Data` and of SEVIRI `TIME`.~~ Resolved: ICNF = Europe/Lisbon local time (§13); SEVIRI still assumed UTC (consistent with the result).
 3. **Sample size.** ~300 events ≥1,000 ha and ~2,300 ≥100 ha with coordinates in the overlap period; DL (ConvLSTM/Transformer) will need augmentation (spatial/rotation/flip, crops), a lower size threshold with noisier detections, pre-training/synthetic data, or extension to Europe (via FIRMS) — cf. the proposal's European extension. Decide the minimum burned area / detection count.
 4. **Resolution gap.** SEVIRI pixel ≈ 3–5 km: ignition localisation to better than a pixel requires sub-pixel regression or probability-map-weighted centroid; define the metric (km error, hit within k pixels, calibration of the probability map).
 5. **Temporal framing.** "From the earliest detectable stage onwards": sequence length, how many 15-min steps after first detection, handling of sparse/irregular detections (gaps due to cloud or low FRP).
@@ -146,8 +160,8 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 
 ## 10. Suggested roadmap
 
-1. **Feel the data (current stage):** fix cleaning issues in §7; parse both files into tidy parquet; plot large events in lat–lon–time (the supervisor's recommended first step); compare local vs UTC time for `Data`.
-2. **Event ↔ hotspot matching:** build the labelled event catalogue (event id, ignition point, first detection, cluster time series, FRP stats) and the baseline predictors above; report error distribution by fire size.
+1. **Feel the data (done 2026-10-07):** fix cleaning issues in §7; parse both files into tidy parquet; plot large events in lat–lon–time (the supervisor's recommended first step); compare local vs UTC time for `Data`.
+2. **Event ↔ hotspot matching (next):** build the labelled event catalogue (event id, ignition point, first detection, cluster time series, FRP stats) and the baseline predictors above; report error distribution by fire size.
 3. **Dataset construction:** rasterise to a fixed grid (per-timestep FRP, confidence, valid-pixel masks), crop patches around events, add covariates (DEM, land cover, ERA5-Land), define train/val/test by event.
 4. **Model 1 — ConvLSTM**, targets: coordinate regression and probability map; ablation on sequence length and covariates.
 5. **Model 2 — CNN + Transformer**, same targets and splits.
@@ -164,7 +178,21 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 
 ## 12. Conventions for future work
 
-- Raw files in `data/` are read-only; write derived data to a new folder (e.g. `data/processed/`) and code to `src/` or `notebooks/`.
-- Keep a single timezone (UTC) internally; document any conversion of ICNF times.
+- Raw files in `data/raw/` are read-only; derived data goes to `data/processed/`, code to `src/`, plots to `figures/`, reports to `outputs/`.
+- Work from the processed parquet files, not the raw files.
+- Keep a single timezone (UTC) internally: use `start_utc`/`end_utc` for ICNF and `time_utc` for SEVIRI.
 - Always load the `.mat` with `scipy.io.loadmat` and flatten with `.ravel()` (arrays are shape `(1, N)`, `TIME` is `(N,)`).
-- Install modelling dependencies (PyTorch, scikit-learn, xarray, geopandas, rasterio, cdsapi) into `.venv` when needed.
+- Log every step and decision in `notes.md`.
+- Install modelling dependencies (PyTorch, scikit-learn, xarray, geopandas, rasterio, cdsapi) into `.venv` when needed, and add them to `requirements.txt`.
+
+## 13. Results so far (2026-10-07)
+
+Details and numbers in `notes.md`.
+
+- **Cleaning** (`notes.md` §1.3): ICNF 813,384 → 806,926 rows (477,674 with valid coordinates; 361,091 in 2004–2019, of which 2,311 ≥ 100 ha and 292 ≥ 1,000 ha). SEVIRI 569,019 → 568,123 rows. The ICNF ".csv" copy was not lossless (timestamps shifted by −1 s in 1989–1997) and was deleted; the ".xlsx" is the source.
+- **Time zone** (`notes.md` §1.4): ICNF times are Portuguese local time. The lag between ICNF start and first SEVIRI detection jumps by ~0.9 h at the daylight saving switch (also when comparing only the same months). UTC columns added (§1.5); 42 start times in DST-switch hours could not be converted.
+- **Largest fires in lat–lon–time** (`notes.md` §2.1, 12 largest fires 2004–2019):
+  - 10 of 12 are detected within ~1 h of the ICNF start, first hotspot 2–6 km (1–2 SEVIRI pixels) from the ICNF ignition point; hotspots then spread away from it over time.
+  - Pedrógão Grande and Góis (2017-06-17) are not detected for 16–20 h: very few detections in the whole domain that afternoon (smoke/pyrocumulus or rejected retrievals). Missing hotspots ≠ no fire.
+  - Simultaneous neighbouring fires (2017-10-15, Arouca 2016) mix their hotspots, so hotspots must be assigned to individual fires (spatio-temporal clustering) before events can be used as samples.
+  - ICNF end times do not match the hotspot activity; the hotspots should define the event end.
