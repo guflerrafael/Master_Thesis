@@ -2,7 +2,7 @@
 
 > Purpose: single source of truth for future work on this project. It consolidates the thesis proposal (`infos.txt`), the supervisor's messages, the two datasets in `data/raw/` and an independent data audit done when this file was first written (2026-10-01). Numbers marked **[audit]** were computed directly from the raw files, not copied from the proposal.
 >
-> Last updated 2026-10-07. Status: data cleaned, time zone resolved, first exploration done (see §13). Step-by-step methods log, with every decision and row count: `notes.md`.
+> Last updated 2026-10-08. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, heatmap sample design drafted (see §13–14). No model code yet. Step-by-step methods log, with every decision and row count: `notes.md`.
 
 ---
 
@@ -51,27 +51,35 @@ Master_Thesis/
 │   ├── raw/                           as received, never modified
 │   │   ├── FRP_SEVIRI_PT_2004_2019.mat   (3.5 MB)  SEVIRI FRP hotspots
 │   │   └── ignic_ICNF.xlsx               (51 MB)   official ICNF fire occurrences 1980–2023
-│   └── processed/                     written by src/clean_data.py
-│       ├── icnf_fires.parquet
-│       └── seviri_frp.parquet
+│   ├── processed/
+│   │   ├── icnf_fires.parquet, seviri_frp.parquet             src/clean_data.py
+│   │   └── seviri_frp_events.parquet, seviri_events.parquet,
+│   │       seviri_nuclei.parquet                              src/cluster_hotspots.py
+│   └── external/ne_10m_admin_0_countries.zip   Natural Earth borders (public domain)
 ├── src/
 │   ├── clean_data.py          raw → processed parquet (cleaning + UTC conversion)
 │   ├── eda.py                 profiling reports, raw and processed
 │   ├── timezone_check.py      ICNF time zone test → figures/timezone_lag.png
-│   └── plot_largest_fires.py  largest fires in lat–lon–time → figures/largest_fires_lat_lon_time.png
+│   ├── plot_largest_fires.py  largest fires in lat–lon–time → figures/largest_fires_lat_lon_time.png
+│   ├── eda_figures.py         descriptive figures 01–09 → figures/eda/ (+ shared helpers)
+│   ├── proximity_analysis.py  neighbouring fires, shared hotspots → figures/eda/10–11
+│   ├── cluster_hotspots.py    SEVIRI events + nuclei → figures/clustering/
+│   └── tiling_design.py       native grid, data sufficiency, sample design → figures/tiling/
 ├── outputs/profiling/{raw,processed}/{icnf,seviri}_eda_report.html
-├── figures/
+├── outputs/*_log.txt          numbers printed by the scripts
+├── figures/{eda,clustering,tiling}/
+├── documents/papers/          reference PDFs (not in git)
 ├── notes.md           methods log (basis for the write-up)
 ├── thesis.md          this file
 ├── infos.txt          proposal outline + supervisor messages
 ├── requirements.txt
-├── .gitignore         excludes .venv/, __pycache__/, .DS_Store
+├── .gitignore         excludes .venv/, __pycache__/, .DS_Store, documents/
 └── .vscode/settings.json
 ```
-Git repository (branch `main`, no remote yet), first commit 2026-10-07. No modelling code exists yet. Reproduce with the four scripts in the order given in `notes.md` §0, run from the repository root.
+Git repository (branch `main`, no remote yet), first commit 2026-10-07. No modelling code exists yet. Reproduce with the scripts in the order given in `notes.md` §0, run from the repository root.
 
 ### Environment
-Python 3.11 venv (`.venv/`, not in git). `requirements.txt` lists only what `src/` imports: pandas 2.3.3, numpy 2.3.5, scipy 1.16.3, openpyxl 3.1.5, pyarrow 25.0.1, matplotlib 3.10.0, fg-data-profiling 4.19.1 (imported as `data_profiling`). The venv also contains seaborn, statsmodels, ydata-profiling and others not used by the code. **Not installed:** PyTorch/TensorFlow, scikit-learn, xarray, geopandas, rasterio, netCDF/h5py — needed for the planned work (and `cdsapi` for ERA5-Land).
+Python 3.11 venv (`.venv/`, not in git). `requirements.txt` lists only what `src/` imports: pandas 2.3.3, numpy 2.3.5, scipy 1.16.3, openpyxl 3.1.5, pyarrow 25.0.1, matplotlib 3.10.0, fg-data-profiling 4.19.1 (imported as `data_profiling`), geopandas 1.2.0, pyproj 3.7.2. The venv also contains seaborn, statsmodels, ydata-profiling and others not used by the code. **Not installed:** PyTorch/TensorFlow, scikit-learn, xarray, rasterio, netCDF/h5py — needed for the planned work (and `cdsapi` for ERA5-Land).
 
 ## 6. Datasets
 
@@ -146,28 +154,29 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 
 ## 9. Key challenges and open questions
 
-1. **Label vs. observation mismatch.** ICNF gives point + start/end; SEVIRI gives hotspot clouds. Need a rigorous event ↔ hotspot-cluster matching rule (space buffer, time window, confidence filter, handling of overlapping fires; e.g. 2017-10-15 had many simultaneous large fires).
+1. **Label vs. observation mismatch.** ICNF gives point + start/end; SEVIRI gives hotspot clouds. Simultaneous fires are common (§13). *Approach now:* the model predicts heatmaps of all ignitions from raw input, so no hand-made hotspot ↔ fire assignment is needed for training; the clustering (events/nuclei) is used as baseline, analysis and ablation (§14).
 2. ~~**Time zone** of ICNF `Data` and of SEVIRI `TIME`.~~ Resolved: ICNF = Europe/Lisbon local time (§13); SEVIRI still assumed UTC (consistent with the result).
-3. **Sample size.** ~300 events ≥1,000 ha and ~2,300 ≥100 ha with coordinates in the overlap period; DL (ConvLSTM/Transformer) will need augmentation (spatial/rotation/flip, crops), a lower size threshold with noisier detections, pre-training/synthetic data, or extension to Europe (via FIRMS) — cf. the proposal's European extension. Decide the minimum burned area / detection count.
+3. **Sample size.** 2,705 fires ≥ 50 ha and 1,738 ≥ 100 ha seen by SEVIRI in 2004–2019, 42 % of the latter in 2005/2016/2017 (§14); DL (ConvLSTM/Transformer) will need augmentation (spatial/rotation/flip, crops), a lower size threshold with noisier detections, pre-training/synthetic data, or extension to Europe (via FIRMS) — cf. the proposal's European extension. Decide the minimum burned area / detection count.
 4. **Resolution gap.** SEVIRI pixel ≈ 3–5 km: ignition localisation to better than a pixel requires sub-pixel regression or probability-map-weighted centroid; define the metric (km error, hit within k pixels, calibration of the probability map).
 5. **Temporal framing.** "From the earliest detectable stage onwards": sequence length, how many 15-min steps after first detection, handling of sparse/irregular detections (gaps due to cloud or low FRP).
-6. **Cross-validation.** Split by *event* and also by year/region to avoid leakage between adjacent pixels/time steps of the same fire and between simultaneous fires.
-7. **Environmental covariates** (not yet obtained): DEM, CORINE/land cover, fuel maps, ERA5-Land hourly meteorology (and possibly FIRMS MODIS/VIIRS active fires for finer spatial detail). Common grid choice needed (SEVIRI native, or fixed ~0.04–0.05° / 5 km).
+6. **Cross-validation.** Draft: chronological split train 2004–2014 / val 2015–2016 / test 2017–2019 (§14); possibly leave-one-year-out in addition. Split by year to avoid leakage between adjacent pixels/time steps of the same fire and between simultaneous fires.
+7. **Environmental covariates** (not yet obtained): DEM, CORINE/land cover, fuel maps, ERA5-Land hourly meteorology (and possibly FIRMS MODIS/VIIRS active fires for finer spatial detail). Grid: the native SEVIRI grid (reconstructed exactly, §14).
 8. **Data currency.** FRP data end in 2019, ICNF in 2023; the supervisor notes the files are outdated — extend SEVIRI FRP (e.g. LSA SAF FRP-PIXEL product / FIRMS) to 2020–2023 if possible.
-9. **Spain overlap.** Hotspots in the SEVIRI domain outside Portugal have no labels — decide whether to mask or use as negatives / context.
+9. **Spain overlap.** Hotspots outside Portugal have no labels — draft: keep as input context, exclude from the loss (§14).
 10. **Baselines.** First-hotspot centroid, FRP-weighted centroid of the first *n* detections, earliest-cluster + backward fire-spread heuristic; compare against ConvLSTM and CNN–Transformer.
 11. **Interpretability.** Planned XAI (saliency / attention / integrated gradients) — to define after the first model works.
 
 ## 10. Suggested roadmap
 
 1. **Feel the data (done 2026-10-07):** fix cleaning issues in §7; parse both files into tidy parquet; plot large events in lat–lon–time (the supervisor's recommended first step); compare local vs UTC time for `Data`.
-2. **Event ↔ hotspot matching (next):** build the labelled event catalogue (event id, ignition point, first detection, cluster time series, FRP stats) and the baseline predictors above; report error distribution by fire size.
-3. **Dataset construction:** rasterise to a fixed grid (per-timestep FRP, confidence, valid-pixel masks), crop patches around events, add covariates (DEM, land cover, ERA5-Land), define train/val/test by event.
-4. **Model 1 — ConvLSTM**, targets: coordinate regression and probability map; ablation on sequence length and covariates.
-5. **Model 2 — CNN + Transformer**, same targets and splits.
-6. **Evaluation & XAI:** localisation error, hit rate, generalisation by size/vegetation/region, compute cost; saliency/attention analysis.
-7. **Extension (optional):** European scale with FIRMS/harmonised datasets.
-8. **Write-up.**
+2. **Hotspot clustering (done 2026-10-08):** SEVIRI events and nuclei, case study 2017-10-15 (§14).
+3. **Sample design (drafted 2026-10-08, next: confirm with supervisor):** native grid, 12 h target periods with 24 h input, heatmap targets, ignore regions, chronological split (§14).
+4. **Dataset construction + baselines (next):** build the input tensors and target heatmaps; first-hotspot / nucleus-birth baselines on the same split and metrics; add covariates (DEM, land cover, ERA5-Land) later.
+5. **Model 1 — ConvLSTM**, target: ignition heatmap (probability map); ablation on sequence length, covariates and clustered vs. raw input.
+6. **Model 2 — CNN + Transformer**, same targets and splits.
+7. **Evaluation & XAI:** detection rate, false alarms, localisation error (peaks matched to ICNF within k km), separately for isolated vs. merged fires; generalisation by size/vegetation/region, compute cost; saliency/attention analysis.
+8. **Extension (optional):** SEVIRI 2020–2023; European scale with FIRMS/harmonised datasets.
+9. **Write-up.**
 
 ## 11. Reference list (from the proposal)
 
@@ -183,9 +192,10 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 - Keep a single timezone (UTC) internally: use `start_utc`/`end_utc` for ICNF and `time_utc` for SEVIRI.
 - Always load the `.mat` with `scipy.io.loadmat` and flatten with `.ravel()` (arrays are shape `(1, N)`, `TIME` is `(N,)`).
 - Log every step and decision in `notes.md`.
-- Install modelling dependencies (PyTorch, scikit-learn, xarray, geopandas, rasterio, cdsapi) into `.venv` when needed, and add them to `requirements.txt`.
+- Never use ICNF to build model inputs (crops, sequence start, masks of single fires); ICNF only selects samples and gives labels.
+- Install modelling dependencies (PyTorch, scikit-learn, xarray, rasterio, cdsapi) into `.venv` when needed, and add them to `requirements.txt`.
 
-## 13. Results so far (2026-10-07)
+## 13. Results so far (2026-10-07/08)
 
 Details and numbers in `notes.md`.
 
@@ -196,3 +206,15 @@ Details and numbers in `notes.md`.
   - Pedrógão Grande and Góis (2017-06-17) are not detected for 16–20 h: very few detections in the whole domain that afternoon (smoke/pyrocumulus or rejected retrievals). Missing hotspots ≠ no fire.
   - Simultaneous neighbouring fires (2017-10-15, Arouca 2016) mix their hotspots, so hotspots must be assigned to individual fires (spatio-temporal clustering) before events can be used as samples.
   - ICNF end times do not match the hotspot activity; the hotspots should define the event end.
+- **Descriptive figures** (`notes.md` §2.2, `figures/eda/01–09`): fires ≥ 100 ha are 0.6 % of fires but 80 % of burned area; SEVIRI detects ≥ 80 % of fires ≥ 100 ha (vs. chance ~10 %), ~43 % of 10–50 ha; yearly SEVIRI fire radiative energy vs. ICNF burned area r = 0.97; 142 persistent off-season pixels (mostly Spain); 17 % of detections in Portugal have no ICNF fire. Placeholder burned areas < 0.001 ha in 17,693 records.
+- **Neighbouring fires** (`notes.md` §2.3): ~1 in 4 fires ≥ 100 ha has another ≥ 100 ha fire within 10 km and ±24 h (control 4 %); ~1 in 3 shares > 50 % of its hotspots with another fire. 72 % of all ignition points are shared exactly with other fires (locality coordinates?), 10 % for fires ≥ 100 ha.
+- **Clustering** (`notes.md` §3.1–3.2): SEVIRI-only space–time clustering (6 km, 6 h) → 24,690 events, 25,954 nuclei. For fires alone in their event the event start is ~4 km / +0.2 h from the ICNF ignition (= first-hotspot baseline); for fires joining a burning event nuclei cut the error from 11 to 6 km, but ~3/4 of those still share a nucleus with another fire (ignitions within ~1–2 pixels of active fronts). 32 % of nuclei are reappearances after gaps, not ignitions.
+
+## 14. Current plan: heatmap model on the native grid (draft 2026-10-08, `notes.md` §4)
+
+- **Approach:** input = raw FRP sequences (no clustering); target = heatmap with a bump at every ICNF ignition in the window (the proposal's ignition probability map); hotspot ↔ fire assignment left to the model. Clustering = baseline, analysis, ablation.
+- **Grid:** native SEVIRI grid recovered from the pixel lat/lon with the geostationary projection (sub-satellite longitude 0°, valid for all years; 8,402 pixels → 8,402 native pixels, no collisions); domain 177 × 106 pixels, ~3.2 × 4.5 km each.
+- **Samples:** 12 h target periods from 06/18 UTC, input 6 h before + 12 h + 6 h after (96 × 15 min); channels FRP, confidence, detection flag (covariates later). Targets: fires ≥ 50 ha seen by SEVIRI (Gaussian σ = 1 px); ignore regions for fires 10–50 ha, unseen fires and Spain. Train on 32 × 32 crops, infer on the full domain.
+- **Counts:** 1,147 of 11,648 periods hold ≥ 1 target (2,705 targets); 4,254 periods with detections but no target; 57 % of 32 × 32 crops around a target hold another target, 81 % show earlier activity.
+- **Split:** train 2004–2014 (1,890 targets), val 2015–2016 (389), test 2017–2019 (426).
+- **To discuss with the supervisor:** this change of approach; SEVIRI FRP 2020–2023; burned-area perimeters (ICNF/EFFIS) as extra supervision; 50 vs. 100 ha targets.
