@@ -2,7 +2,7 @@
 
 > Purpose: single source of truth for future work on this project. It consolidates the thesis proposal (`infos.txt`), the supervisor's messages, the two datasets in `data/raw/` and an independent data audit done when this file was first written (2026-10-01). Numbers marked **[audit]** were computed directly from the raw files, not copied from the proposal.
 >
-> Last updated 2026-10-08. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, heatmap sample design drafted (see §13–14). No model code yet. Step-by-step methods log, with every decision and row count: `notes.md`.
+> Last updated 2026-10-08. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, sample index + sample builder + evaluation protocol + baselines done (see §13–15). No model trained yet (PyTorch not installed). Step-by-step methods log, with every decision and row count: `notes.md`.
 
 ---
 
@@ -55,6 +55,7 @@ Master_Thesis/
 │   │   ├── icnf_fires.parquet, seviri_frp.parquet             src/clean_data.py
 │   │   └── seviri_frp_events.parquet, seviri_events.parquet,
 │   │       seviri_nuclei.parquet                              src/cluster_hotspots.py
+│   │   └── model/  detections, fires, labels, periods .parquet, static.npz   src/build_dataset.py
 │   └── external/ne_10m_admin_0_countries.zip   Natural Earth borders (public domain)
 ├── src/
 │   ├── clean_data.py          raw → processed parquet (cleaning + UTC conversion)
@@ -64,10 +65,15 @@ Master_Thesis/
 │   ├── eda_figures.py         descriptive figures 01–09 → figures/eda/ (+ shared helpers)
 │   ├── proximity_analysis.py  neighbouring fires, shared hotspots → figures/eda/10–11
 │   ├── cluster_hotspots.py    SEVIRI events + nuclei → figures/clustering/
-│   └── tiling_design.py       native grid, data sufficiency, sample design → figures/tiling/
+│   ├── tiling_design.py       native grid, data sufficiency, sample design → figures/tiling/
+│   ├── grid.py                native SEVIRI grid (lat/lon ↔ row/col ↔ image i/j)
+│   ├── build_dataset.py       sample index for the heatmap model
+│   ├── dataset.py             dense samples on demand (FireData.sample) + checks
+│   ├── evaluate.py            matching + metrics (AP, recall, error, by subgroup)
+│   └── baselines.py           nucleus-birth baselines → figures/baselines/
 ├── outputs/profiling/{raw,processed}/{icnf,seviri}_eda_report.html
 ├── outputs/*_log.txt          numbers printed by the scripts
-├── figures/{eda,clustering,tiling}/
+├── figures/{eda,clustering,tiling,dataset,baselines}/
 ├── documents/papers/          reference PDFs (not in git)
 ├── notes.md           methods log (basis for the write-up)
 ├── thesis.md          this file
@@ -171,7 +177,8 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 1. **Feel the data (done 2026-10-07):** fix cleaning issues in §7; parse both files into tidy parquet; plot large events in lat–lon–time (the supervisor's recommended first step); compare local vs UTC time for `Data`.
 2. **Hotspot clustering (done 2026-10-08):** SEVIRI events and nuclei, case study 2017-10-15 (§14).
 3. **Sample design (drafted 2026-10-08, next: confirm with supervisor):** native grid, 12 h target periods with 24 h input, heatmap targets, ignore regions, chronological split (§14).
-4. **Dataset construction + baselines (next):** build the input tensors and target heatmaps; first-hotspot / nucleus-birth baselines on the same split and metrics; add covariates (DEM, land cover, ERA5-Land) later.
+4. **Dataset construction + baselines (done 2026-10-08):** sparse sample index + on-demand sample builder, evaluation protocol, nucleus-birth baselines (§15). Covariates (DEM, land cover, ERA5-Land) later.
+4b. **Next:** install PyTorch; first ConvLSTM on 32 × 32 crops, evaluated with `evaluate.py` against the baseline.
 5. **Model 1 — ConvLSTM**, target: ignition heatmap (probability map); ablation on sequence length, covariates and clustered vs. raw input.
 6. **Model 2 — CNN + Transformer**, same targets and splits.
 7. **Evaluation & XAI:** detection rate, false alarms, localisation error (peaks matched to ICNF within k km), separately for isolated vs. merged fires; generalisation by size/vegetation/region, compute cost; saliency/attention analysis.
@@ -218,3 +225,9 @@ Details and numbers in `notes.md`.
 - **Counts:** 1,147 of 11,648 periods hold ≥ 1 target (2,705 targets); 4,254 periods with detections but no target; 57 % of 32 × 32 crops around a target hold another target, 81 % show earlier activity.
 - **Split:** train 2004–2014 (1,890 targets), val 2015–2016 (389), test 2017–2019 (426).
 - **To discuss with the supervisor:** this change of approach; SEVIRI FRP 2020–2023; burned-area perimeters (ICNF/EFFIS) as extra supervision; 50 vs. 100 ha targets.
+
+## 15. Dataset and baselines (2026-10-08, `notes.md` §5)
+
+- **Sample index** (`data/processed/model/`, 7 MB, sparse): 568,123 detections on the native grid, 10,911 fires ≥ 10 ha, 2,705 targets / 8,427 ignore labels, 11,648 periods, static masks. `FireData.sample(period, crop)` builds x (96 × 3 × h × w), heatmap y and loss weight w on demand (21.6 MB for the full domain). Refinements: ±1 h boundary ignores; targets win over ignore regions (otherwise 11 % of targets had no loss at their own pixel). All checks pass.
+- **Evaluation:** predicted points matched per period to targets within 5 / 10 km (ignore fires neither TP nor FP, Spain excluded); AP, recall, best F1, false alarms/day, median error, recall for isolated vs. non-isolated and by size. **Test 2017–2019 locked.**
+- **Baseline to beat** (every nucleus birth = a predicted ignition, scored by its FRE in the input window), validation 2015–2016: **AP 0.24 @ 5 km, 0.57 @ 10 km**; recall (all predictions) 0.79 @ 10 km (isolated 0.95, non-isolated 0.74); median error of matches 4.3 km. Filtering out "reappeared" nuclei lowers recall to 0.64 — many ICNF fires start where something burned shortly before (rekindles?).

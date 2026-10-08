@@ -23,15 +23,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pyproj import Transformer
-
 import eda_figures as E
+from grid import native_rc
 
 PROC = E.PROC
 FIG = E.ROOT / "figures" / "tiling"
 
-SSD = 3000.403165817   # SEVIRI sampling distance at nadir [m]
-GEOS = "+proj=geos +h=35785831 +a=6378169 +b=6356583.8 +lon_0=0 +sweep=y +units=m"
 TARGET_HA, IGNORE_HA = 50, 10
 PERIOD_H, HISTORY_H, TAIL_H = 12, 6, 6
 PERIOD_START_UTC = 6          # target periods start at 06 and 18 UTC (diurnal minimum of activity)
@@ -39,15 +36,6 @@ SEEN_KM, SEEN_PRE_H, SEEN_POST_H = 5, 1, 6
 CROPS = (16, 32, 64)
 CROP = 32
 SPLIT = {"train": range(2004, 2015), "val": range(2015, 2017), "test": range(2017, 2020)}
-
-_to_geos = Transformer.from_crs("EPSG:4326", GEOS, always_xy=True)
-
-
-def native_rc(lat, lon):
-    """Continuous native SEVIRI (row, col); rounding gives the pixel. Row increases northwards."""
-    x, y = _to_geos.transform(np.asarray(lon), np.asarray(lat))
-    return np.asarray(y) / SSD, np.asarray(x) / SSD
-
 
 def load():
     sev = pd.read_parquet(PROC / "seviri_frp.parquet").sort_values("time_utc").reset_index(drop=True)

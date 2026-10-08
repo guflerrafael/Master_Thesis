@@ -1,0 +1,5 @@
+Checks on 300 random periods: detection count mismatches 0, targets without a heatmap peak at their pixel 0
+Targets inside an ignore region of another fire (weight 0 at their pixel): 0 of 2705
+Random 32 × 32 crops (jitter ±8 px) around 200 targets contain their target: 200 of 200
+Sample shapes: x (96, 3, 177, 106) (21.6 MB), y (177, 106), w (177, 106); weighted cells per period: 6,735
+figure: figures/dataset/example_full_domain.png

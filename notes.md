@@ -8,6 +8,7 @@ This document serves as a basis for the write up. All notes (more specifically a
 data/raw/          ignic_ICNF.xlsx, FRP_SEVIRI_PT_2004_2019.mat   (as received, never modified)
 data/processed/    icnf_fires.parquet, seviri_frp.parquet          (src/clean_data.py)
                    seviri_frp_events.parquet, seviri_events.parquet, seviri_nuclei.parquet (src/cluster_hotspots.py)
+data/processed/model/ sample index for the heatmap model: detections, fires, labels, periods .parquet, static.npz (src/build_dataset.py)
 data/external/     ne_10m_admin_0_countries.zip (country borders, see 2.2)
 outputs/profiling/ ydata-profiling reports in raw/ and processed/  (src/eda.py)
 outputs/           *_log.txt, cluster_hotspots_sensitivity.txt     (numbers printed by the scripts)
@@ -15,6 +16,8 @@ figures/           plots                                           (src/timezone
 figures/eda/       descriptive figures 01–11                       (src/eda_figures.py, src/proximity_analysis.py)
 figures/clustering/ hotspot events and nuclei, case study 2017-10-15 (src/cluster_hotspots.py)
 figures/tiling/    example training sample                         (src/tiling_design.py)
+figures/dataset/   full-domain example sample                      (src/dataset.py)
+figures/baselines/ precision-recall curves of the baselines        (src/baselines.py)
 src/               all code
 ```
 
@@ -29,6 +32,9 @@ Run from the repository root, in this order:
 6. `.venv/bin/python src/proximity_analysis.py > outputs/proximity_analysis_log.txt`: neighbouring fires and shared hotspots (2.3)
 7. `.venv/bin/python src/cluster_hotspots.py > outputs/cluster_hotspots_log.txt`: hotspot events and nuclei (3.1, 3.2); add `--sensitivity` for the parameter grid (`outputs/cluster_hotspots_sensitivity.txt`)
 8. `.venv/bin/python src/tiling_design.py > outputs/tiling_design_log.txt`: numbers for the sample design (4.1, 4.2)
+9. `.venv/bin/python src/build_dataset.py > outputs/build_dataset_log.txt`: sample index for the model (5.1)
+10. `.venv/bin/python src/dataset.py > outputs/dataset_check_log.txt`: checks of the sample builder + example figure (5.1)
+11. `.venv/bin/python src/baselines.py > outputs/baselines_log.txt`: baselines on train/validation (5.2, 5.3)
 
 ## 1. Data
 
@@ -449,3 +455,54 @@ Open questions:
 - 15-min steps vs. hourly aggregation (24 steps, fewer gaps, less detail).
 - Whether to use the 6 h-"seen" criterion for selecting targets in training only (evaluation should report all fires ≥ threshold, seen or not).
 - Handling of the 1,069 nuclei / fires born next to active fronts in the evaluation (report separately).
+
+## 5. Dataset and baselines
+
+### 5.1 Sample index and sample builder (2026-10-08)
+
+Scripts: `src/grid.py` (native grid, shared by all scripts; `tiling_design.py` now uses it, output unchanged), `src/build_dataset.py` (sample index), `src/dataset.py` (dense samples on demand + checks); outputs in `data/processed/model/`; logs `outputs/build_dataset_log.txt`, `outputs/dataset_check_log.txt`; figure `figures/dataset/example_full_domain.png`.
+
+Storage: sparse. A dense full-domain sample is 96 × 3 × 177 × 106 float32 = 21.6 MB, so tensors are built on demand from:
+- `detections.parquet`: all 568,123 detections with image indices (i, j) on the native grid (i = north→south, j = west→east, all inside the 177 × 106 grid) and 15-min slot.
+- `fires.parquet`: 10,911 ICNF fires ≥ 10 ha (2004–2019) with continuous image position, seen flag (4.1), period, split, `isolated` (no other fire ≥ 10 ha within 20 km and ±72 h; 657 of the 2,705 targets) and size class.
+- `labels.parquet`: (period, fire, role) pairs: 2,705 `target` and 8,427 `ignore` entries.
+- `periods.parquet`: 11,648 periods with split and counts; `static.npz`: per-cell lat/lon, mainland mask (6,127 cells), loss mask (mainland + 1 px border for coastal/border ignitions, 6,760 cells; all targets inside), persistent off-season cells (142).
+
+Label rules (as 4.2, with two refinements):
+- Seen fires ≥ 50 ha that start within 1 h *outside* a period are `ignore` in that neighbouring period (ICNF start times are uncertain by about that much; 221 extra ignore entries).
+- **Targets win over ignore regions:** the first version gave 295 of 2,705 targets (11 %) zero weight at their own pixel because they lay within 2 px of an ignore fire. The loss weight is now kept within 1 px of every target.
+
+Sample (`FireData.sample(period, crop=None)`): `x` (96, 3, h, w) with log(1 + FRP)/log(1 + 1100), confidence/100, detected flag; `y` = max of Gaussians (σ = 1 px) at the targets; `w` = loss weight; plus the labels inside the crop. `crop_origin()` places a crop around a position with random jitter.
+
+Checks (300 random periods / all positive periods / 200 crops): every detection of the input window is in `x` (0 mismatches); every target has a heatmap peak at its pixel (0 failures); 0 targets with zero weight; 200 of 200 jittered 32 × 32 crops contain their target.
+
+### 5.2 Evaluation protocol (2026-10-08)
+
+Script: `src/evaluate.py`. Predictions are points (period, lat, lon, score); a heatmap model will be converted by peak extraction.
+- Per period, predictions in descending score order: matched to the nearest unmatched target within k km → true positive; otherwise within k km of an ignore fire → ignored; otherwise false positive (duplicates too). Predictions outside the loss mask (e.g. Spain) are dropped.
+- k = 5 km (about one pixel diagonal) and 10 km.
+- Metrics per split: average precision (AP, area under the interpolated precision–recall curve), recall and precision with all predictions, best F1 (with P, R, false alarms per day), median error of true positives, recall by subgroup (isolated / size class), and the distance from each target to the nearest prediction of its period (no matching).
+- **The test split (2017–2019) stays locked** until the final comparison; baselines and model choices use train and validation only.
+
+### 5.3 Baselines from nucleus births (2026-10-08)
+
+Script: `src/baselines.py`; results `outputs/baselines_log.txt`; figure `figures/baselines/pr_curves_val.png`.
+
+Every nucleus (3.2) born inside a target period = one predicted ignition, located at its birth (FRP-weighted centroid of the birth time step). Score = fire radiative energy of the nucleus inside the 24 h input window (no future information). Variants: without reappeared nuclei; also without nuclei on persistent pixels; first-hour centroid instead of birth location.
+
+Validation 2015–2016 (389 targets; train 2004–2014 in brackets, same picture):
+
+| Baseline | AP @ 5 km | AP @ 10 km | Recall @ 10 km (all preds) | Best F1 @ 10 km (P / R) | False alarms/day @ best F1 | Median error TP @ 10 km |
+|---|---|---|---|---|---|---|
+| **birth** | **0.24** (0.22) | **0.57** (0.52) | **0.79** (0.81) | 0.64 (0.68 / 0.59) | 0.15 | 4.3 km |
+| birth, no reappeared | 0.23 | 0.55 | 0.64 | 0.63 (0.71 / 0.56) | 0.12 | 4.3 km |
+| birth, no reappeared/persist. | 0.23 | 0.54 | 0.63 | 0.63 (0.73 / 0.56) | 0.11 | 4.3 km |
+| first-hour centroid | 0.26 | 0.55 | 0.63 | 0.63 (0.74 / 0.56) | 0.11 | 4.3 km |
+
+Recall with all predictions, "birth", validation: isolated targets 0.72 @ 5 km / 0.95 @ 10 km; non-isolated 0.45 / 0.74. Nearest prediction within 5 km for 53 % of the targets (median 4.8 km).
+
+Findings:
+- **Reference baseline: "birth" (all nuclei, FRE score): AP 0.24 @ 5 km, 0.57 @ 10 km on validation.** This is the bar for the model.
+- Removing reappeared nuclei raises precision at low recall but caps recall at ~0.63 (non-isolated targets drop from 0.74 to 0.54 @ 10 km). Many ICNF fires start where something burned 6–48 h before (probably rekindles, which ICNF records as new occurrences, and busy fire areas), so "reappeared" is not a safe "not an ignition" flag. It may still be useful as a model input.
+- Localisation is the weak point: median error of matches ~3.5 km @ 5 km and ~4.3 km @ 10 km, only about half of the targets have a prediction within 5 km. A model must improve AP @ 5 km in particular.
+- Isolated fires are almost always found within 10 km (95 %); the gap is in fires with neighbours (74 %), where the model has the most room.
