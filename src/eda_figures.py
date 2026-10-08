@@ -93,7 +93,7 @@ def map_axes(ax, borders, title, extent=EXTENT):
     ax.grid(False)
     ax.tick_params(labelsize=7)
     ax.set_title(title)
-    ax.text(-6.45, 39.75, "SPAIN", color=MUTED, fontsize=8, ha="center", zorder=4)
+    ax.text(-6.45, 39.75, "SPAIN", color=MUTED, fontsize=8, ha="center", zorder=4, clip_on=True)
 
 
 def in_polygon(lon, lat, poly):
@@ -251,7 +251,9 @@ def fig_frp_confidence(sev):
     save(fig, "05_seviri_frp_confidence.png")
 
 
-def fig_pixel_maps(sev, borders):
+def pixel_stats(sev):
+    """Per SEVIRI pixel: detections, active days, active days outside Jun-Oct, and the
+    'persistent off-season' flag (>= 20 active days, >= 50 % of them outside Jun-Oct)."""
     s = sev.assign(day=sev["time_utc"].dt.floor("D"),
                    off=~sev["time_utc"].dt.month.isin([6, 7, 8, 9, 10]))
     days = s.groupby(["lat", "lon"])["day"].nunique()
@@ -259,7 +261,13 @@ def fig_pixel_maps(sev, borders):
     px = pd.DataFrame({"n": s.groupby(["lat", "lon"]).size(), "days": days,
                        "off_days": off_days}).fillna({"off_days": 0}).reset_index()
     px["off_share"] = px["off_days"] / px["days"]
-    persistent = px[(px["days"] >= 20) & (px["off_share"] >= 0.5)]
+    px["persistent"] = (px["days"] >= 20) & (px["off_share"] >= 0.5)
+    return px
+
+
+def fig_pixel_maps(sev, borders):
+    px = pixel_stats(sev)
+    persistent = px[px["persistent"]]
 
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 7.2))
     map_axes(a1, borders, f"Detections per SEVIRI pixel ({len(px):,} pixels)")

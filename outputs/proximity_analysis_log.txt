@@ -1,0 +1,33 @@
+Part A: 2,311 focus fires (≥ 100 ha, 2004–2019)
+Share of focus fires with ≥ 1 other fire starting within D km and ±T h [%]:
+                        5 km  10 km  20 km  30 km  50 km  100 km
+±24 h any size real     57.3   80.4   94.5   98.4   99.7   100.0
+               control  35.8   61.2   82.0   91.3   96.8    99.1
+      ≥ 10 ha  real     22.8   42.5   64.6   75.6   88.2    95.1
+               control   4.4   12.7   28.4   41.0   56.9    75.1
+      ≥ 100 ha real     11.4   22.8   41.3   54.5   68.6    82.0
+               control   0.6    3.7   11.2   18.9   30.0    47.5
+±72 h any size real     76.6   91.6   98.5   99.8  100.0   100.0
+               control  59.8   81.7   95.3   98.3   99.7    99.9
+      ≥ 10 ha  real     34.1   57.8   77.7   87.1   95.0    98.5
+               control  12.6   28.4   51.3   65.3   79.8    91.4
+      ≥ 100 ha real     17.5   35.4   56.9   69.1   80.8    90.6
+               control   4.0   11.5   25.7   36.4   50.5    68.9
+10_neighbouring_fires.png
+
+Days with ≥ 1 fire ≥ 100 ha: 807; fires on a day that has ≥ 2 such fires: 1,921 of 2,311 (83 %)
+Days with most fires ≥ 100 ha:
+start_utc
+2017-10-15 00:00:00+00:00    51
+2016-08-07 00:00:00+00:00    32
+2005-08-20 00:00:00+00:00    32
+2005-08-04 00:00:00+00:00    29
+2016-08-08 00:00:00+00:00    27
+2004-07-26 00:00:00+00:00    25
+2005-08-19 00:00:00+00:00    21
+2010-08-10 00:00:00+00:00    19
+
+Part B: hotspots claimed by more than one fire
+  competitors ≥ 10 ha: 2,014 focus fires have detections; median shared share 2 %, fires with > 0 %: 51 %, > 50 %: 33 %, 100 %: 14 %
+  competitors ≥ 100 ha: 2,014 focus fires have detections; median shared share 0 %, fires with > 0 %: 38 %, > 50 %: 24 %, 100 %: 9 %
+11_shared_hotspots.png

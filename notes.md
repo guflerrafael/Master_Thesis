@@ -7,11 +7,14 @@ This document serves as a basis for the write up. All notes (more specifically a
 ```
 data/raw/          ignic_ICNF.xlsx, FRP_SEVIRI_PT_2004_2019.mat   (as received, never modified)
 data/processed/    icnf_fires.parquet, seviri_frp.parquet          (src/clean_data.py)
+                   seviri_frp_events.parquet, seviri_events.parquet, seviri_nuclei.parquet (src/cluster_hotspots.py)
 data/external/     ne_10m_admin_0_countries.zip (country borders, see 2.2)
 outputs/profiling/ ydata-profiling reports in raw/ and processed/  (src/eda.py)
-outputs/           eda_figures_log.txt (numbers printed by src/eda_figures.py)
+outputs/           *_log.txt, cluster_hotspots_sensitivity.txt     (numbers printed by the scripts)
 figures/           plots                                           (src/timezone_check.py, src/plot_largest_fires.py)
-figures/eda/       descriptive figures 01–09                       (src/eda_figures.py)
+figures/eda/       descriptive figures 01–11                       (src/eda_figures.py, src/proximity_analysis.py)
+figures/clustering/ hotspot events and nuclei, case study 2017-10-15 (src/cluster_hotspots.py)
+figures/tiling/    example training sample                         (src/tiling_design.py)
 src/               all code
 ```
 
@@ -23,6 +26,9 @@ Run from the repository root, in this order:
 3. `.venv/bin/python src/timezone_check.py`: time zone check (1.4)
 4. `.venv/bin/python src/plot_largest_fires.py`: largest fires in lat–lon–time (2.1)
 5. `.venv/bin/python src/eda_figures.py > outputs/eda_figures_log.txt`: descriptive figures (2.2)
+6. `.venv/bin/python src/proximity_analysis.py > outputs/proximity_analysis_log.txt`: neighbouring fires and shared hotspots (2.3)
+7. `.venv/bin/python src/cluster_hotspots.py > outputs/cluster_hotspots_log.txt`: hotspot events and nuclei (3.1, 3.2); add `--sensitivity` for the parameter grid (`outputs/cluster_hotspots_sensitivity.txt`)
+8. `.venv/bin/python src/tiling_design.py > outputs/tiling_design_log.txt`: numbers for the sample design (4.1, 4.2)
 
 ## 1. Data
 
@@ -231,3 +237,215 @@ Implications for the next steps:
 - **Confidence:** do not filter on confidence before matching. Low-confidence detections are more often unmatched (artefacts), but they are also the early-stage signal. Check the persistent off-season pixels and mask those that are clearly not wildfires, and decide on confidence later (possibly as a model input).
 - **Spain:** 30 % of all detections lie outside mainland Portugal and have no labels. Keep them as spatial context, but exclude them from labels and from the unmatched statistics.
 - **Neighbouring fires:** per-fire energy is noisy partly because hotspots are wrongly assigned between nearby fires. The final matching should cluster detections in space and time first, then link clusters to ICNF fires.
+
+### 2.3 How often are fires and hotspots close in space and time? (2026-10-08)
+
+Script: `src/proximity_analysis.py` (reuses the helpers and the exploratory matching of `src/eda_figures.py`, see 2.2); figures `figures/eda/10_neighbouring_fires.png`, `11_shared_hotspots.png`; numbers in `outputs/proximity_analysis_log.txt`.
+
+Question: how often does a large fire have another fire nearby that could mix up the hotspots or the labels? Focus fires: the 2,311 fires ≥ 100 ha (2004–2019, valid coordinates, UTC start).
+
+**A. Neighbouring ignition points** (fig. 10). Share of focus fires for which another fire starts within D km and ±24 h of its start. Control: the same with the focus fire's start shifted by ±7 days (same place and season, no real simultaneity), averaged over both shifts. Similar fires are mostly relevant for hotspots if they are ≥ 10 ha (SEVIRI rarely sees smaller fires, see fig. 07).
+
+| Neighbour | 5 km | 10 km | 20 km | 30 km | 50 km |
+|---|---|---|---|---|---|
+| ≥ 100 ha, real (control) | 11 % (0.6) | 23 % (3.7) | 41 % (11) | 55 % (19) | 69 % (30) |
+| ≥ 10 ha, real (control) | 23 % (4.4) | 43 % (13) | 65 % (28) | 76 % (41) | 88 % (57) |
+| any size, real (control) | 57 % (36) | 80 % (61) | 95 % (82) | 98 % (91) | 100 % (97) |
+
+- With ±72 h, ≥ 10 ha neighbours: 34 % within 5 km, 58 % within 10 km, 78 % within 20 km (control 13 / 28 / 51 %).
+- Fires cluster in time far more than chance (control 3–10× lower at short distances), so simultaneous fires are not a rare edge case: **about one in four large fires has another ≥ 100 ha fire starting within 10 km and a day, and about two in three has a ≥ 10 ha fire within 20 km.**
+- "Any size" is not informative: small fires are so frequent (especially in the north) that even the control finds a neighbour for most fires.
+- Outbreaks dominate: 83 % of the ≥ 100 ha fires start on a calendar day (UTC) with at least one other ≥ 100 ha fire; the busiest days are 2017-10-15 (51 fires), 2016-08-07 (32), 2005-08-20 (32), 2005-08-04 (29), 2016-08-08 (27), 2004-07-26 (25). Not corrected for chance. 61 % of the close pairs (below) fall in 2005, 2016 and 2017.
+- Close pairs of ≥ 100 ha fires (≤ 10 km, ≤ 24 h apart): 402 pairs involving 527 of the 2,311 fires. Only 14 pairs are within 3 km and 1 h, so there is little sign of one fire being split into several records.
+
+**B. Shared hotspots** (fig. 11). For each focus fire, the detections inside its search area (radius R(A) and window [start − 1 h, end + 24 h], 2.2) that also fall inside the search area of at least one other fire:
+
+| Competing fires | Focus fires with detections | Share of hotspots shared (median) | Fires with any sharing | > 50 % shared | all shared |
+|---|---|---|---|---|---|
+| ≥ 100 ha | 2,014 | 0 % | 38 % | 24 % | 9 % |
+| ≥ 10 ha | 2,014 | 2 % | 51 % | 33 % | 14 % |
+
+- Most fires (about half) are clean, but a sizeable group is not: **one in three large fires shares more than half of its hotspots with another ≥ 10 ha fire**, and 14 % have no hotspot of their own in this definition (small fire next to a larger one, or overlapping search areas).
+- This depends on the generous radius and the end + 24 h window, so it is an upper bound for what a proper clustering would face. It shows the size of the problem: for roughly a third to a half of the labelled fires, hotspots cannot be assigned by proximity to the ICNF point alone.
+
+**C. Shared ignition coordinates (new data-quality finding, not corrected).**
+- 72 % of all 477,674 fires with coordinates share their exact coordinates with at least one other fire; 59 % share them with at least four others. There are only 175,357 distinct points. The most used points occur 578, 483, 443, 395 and 393 times (all in the north-west, around Porto/Braga), which suggests that many coordinates are locality positions (place names geocoded) rather than GPS positions of the ignition.
+- The coordinate precision is DMS-like (e.g. 41.155556 = 41°09′20″); the share with 2 decimals or fewer is 3 % in 2001–2010 and ≤ 1 % later.
+- For fires ≥ 100 ha (2004–2019) it is much less severe: 10 % (about 235 fires) sit at a shared point, 0.4 % at a point used ≥ 5 times. Large fires therefore have less generic coordinates, but the positional accuracy of the labels is still unknown (probably tens to hundreds of metres to several km). This limits what can be demonstrated below one SEVIRI pixel (~3–5 km).
+
+Implications for the next steps:
+- Simultaneous fires are common enough (a quarter to a half of the large fires, depending on the radius) that the clustering step cannot be skipped. A fire-by-fire evaluation must report results separately for isolated fires and fires with close neighbours, and the choice of isolated-only samples is a legitimate first model (about half the fires).
+- Both numbers must be reported with the matching definition, because they depend on R(A) and the time window.
+- Consider checking the labels of the large fires at shared points (about 235) and those within a few km of other ignitions before using them as ground truth.
+
+## 3. Event construction
+
+### 3.1 Clustering SEVIRI hotspots into events (2026-10-08)
+
+Script: `src/cluster_hotspots.py`; outputs `data/processed/seviri_frp_events.parquet` (all detections + `event_id`, `persistent`, `in_pt`) and `data/processed/seviri_events.parquet` (one row per event); figures in `figures/clustering/`; numbers in `outputs/cluster_hotspots_log.txt` and `outputs/cluster_hotspots_sensitivity.txt`.
+
+Goal: group detections that belong to the same fire, **using SEVIRI only**. ICNF is used only to evaluate the result, never to form the events, so events can later define the model input without label leakage (see the input design discussion: the ICNF point may only choose samples and give the label).
+
+Method:
+- Two detections are linked if their pixel centres are ≤ D km apart and their times ≤ gap hours apart (including the same time step). Events = connected groups of linked detections (single linkage in space and time, implemented with union–find over the time-sorted detections).
+- Distances in local metric coordinates (x = lon · 111.32 · cos(lat), y = lat · 110.57 km).
+- Measured before choosing the parameters:
+  - Pixel spacing of the active SEVIRI pixels: nearest neighbour ~3.2 km (E–W), 4th nearest ~5.2 km, 8th ~6.3 km (median) → **D = 6 km links a pixel to its 8 neighbours** (one pixel ~3.2 km E–W × ~4.4 km N–S over Portugal).
+  - Time since the previous detection within 6 km: 89–92 % within 1 h, ~93 % within 24 h, the rest > 48 h ("new" fires). Only ~2 % of detections have gaps between 3 and 24 h, but these links decide whether neighbouring fires are chained together (see sensitivity).
+- Events get ids in order of their first detection. Per event: first/last time, duration, detections, time steps, pixels, FRE, max FRP, median confidence, FRP-weighted centroid (all detections and first time step only), share of detections on persistent off-season pixels (2.2), share inside mainland Portugal.
+- `eda_figures.py` got a helper `pixel_stats()` (same persistent-pixel definition as fig. 06), used here to flag detections.
+
+Evaluation measures (ICNF fires ≥ 100 ha, 2004–2019; diagnostic only):
+- A fire's event = the event of its earliest detection within 5 km of the ignition point in [start − 1 h, start + 12 h] (found for 78.5 % of the fires, independent of the clustering parameters).
+- **Merging:** share of these fires whose event also holds another ≥ 100 ha fire.
+- **Fragmentation**, measured on *isolated* fires only (no other fire ≥ 10 ha within 20 km and ±72 h; 515 of 2,311): share of the hotspots matched to the fire (radius R(A), [start − 1 h, end + 24 h], 2.2) that lie in its own event; reported as share of fires with ≥ 90 % in their own event.
+
+Sensitivity (`--sensitivity`):
+
+| D [km] | gap [h] | events | events ≥ 10 det. | merged fires [%] | isolated fires ≥ 90 % intact [%] |
+|---|---|---|---|---|---|
+| 4.5 | 3 | 32,140 | 7,789 | 21.7 | 71.2 |
+| 4.5 | 12 | 28,456 | 6,963 | 29.0 | 79.8 |
+| 6 | 3 | 26,504 | 6,964 | 27.4 | 84.0 |
+| **6** | **6** | **24,690** | **6,620** | **30.8** | **88.7** |
+| 6 | 12 | 23,378 | 6,150 | 36.5 | 93.1 |
+| 6 | 24 | 19,511 | 5,226 | 44.7 | 98.0 |
+| 9 | 6 | 22,779 | 6,293 | 36.6 | 89.7 |
+| 9 | 24 | 17,617 | 4,852 | 50.1 | 98.8 |
+
+- D = 6 km is better than 9 km for every gap (fewer merges for the same fragmentation); D = 4.5 km splits too many isolated fires.
+- The gap is a direct trade-off between merging and fragmentation. **Chosen: D = 6 km, gap = 6 h** (middle of the trade-off). Merges cannot be avoided completely with any setting: some fires really do burn into each other.
+
+Result (D = 6 km, gap = 6 h): 24,690 events; 6,620 with ≥ 10 detections hold 91.4 % of all detections (median 26 detections, 4.2 h); 409 of them lie mostly (≥ 50 %) on persistent off-season pixels. Largest event: 11,319 detections.
+
+Case study 2017-10-15 (figures `events_2017-10-15_overview.png`, `events_2017-10-15_panels.png`):
+- 51 ICNF fires ≥ 100 ha started that day (UTC), 250,890 ha in total. 39 were linked to an event; the 12 without an early detection are all small (150–354 ha, 2,568 ha together).
+- The 39 fires fall into 23 events; **10 events hold ≥ 2 fires (26 fires)**. Example: event #4 holds Lousã (53.6 kha), Figueira da Foz (19.0 kha), Mealhada and Condeixa-a-Nova, linked over > 50 km during the night.
+- SEVIRI activity in the large events lasted only 8–16 h. Some very large fires produced few detections: Vouzela (15.7 kha) 4, Alcobaça (17.3 kha) 28, Arganil (38.0 kha) 58 (smoke/cloud likely; not checked).
+- Distance between the ICNF ignition and the FRP-weighted centroid of the event's first time step, and lag of the event start after the ICNF start (medians):
+
+| Fire's position in its event | Fires | Distance | Lag |
+|---|---|---|---|
+| alone in its event | 13 | 3.4 km | +1.3 h |
+| first fire of a shared event | 10 | 3.6 km | +0.9 h |
+| later fire of a shared event | 16 | 16.7 km | −5.8 h |
+
+Conclusions:
+- For isolated fires and for the first fire of a merged event, the event start is a good proxy of the ignition (~1 pixel, ~1 h), consistent with 2.1.
+- **For fires that join an event that is already burning, the event start belongs to another fire** (17 km away, ~6 h earlier). These fires cannot be labelled with "their" event as is. Options for the next step: (a) exclude them / label only the first fire of each event; (b) keep the merge history of the clustering: every time a new group of detections appears (a new connected component) it is a separate "nucleus" with its own birth time and position, even if it later merges with others. Nuclei would be the candidate ignitions to link to ICNF fires.
+- Fires with few detections (smoke/cloud) remain a limitation that clustering cannot fix.
+
+### 3.2 Nuclei: separate starts inside merged events (2026-10-08)
+
+Same script (`src/cluster_hotspots.py`, run in the same pass as the events); output `data/processed/seviri_nuclei.parquet` (one row per nucleus) and a `nucleus_id` column in `seviri_frp_events.parquet`; figures `figures/clustering/nuclei_vs_events.png` and the updated `events_2017-10-15_panels.png`; numbers in `outputs/cluster_hotspots_log.txt`.
+
+Motivation (3.1): for fires that join an event that is already burning, the event start belongs to another fire. Nuclei keep track of where and when each separate group of detections first appeared, even if the groups later merge into one event.
+
+Method (SEVIRI only, same D = 6 km and gap = 6 h as the events):
+- A detection with an earlier linked detection (≤ 6 km, ≤ 6 h) inherits the nucleus of the **nearest** such detection.
+- A detection without one, but next to a detection of the same time step that already has a nucleus, inherits from the nearest of those (fire growing within one 15-min step).
+- Remaining detections are a **birth**: neighbouring new detections of the same time step form one new nucleus.
+- Every nucleus lies inside exactly one event; ids follow birth order. Per nucleus: birth time, birth location (FRP-weighted centroid of the birth time step), size, FRE, duration, order of birth within its event, and two context fields:
+  - `dist_active_km`: distance from the birth to the nearest detection of another nucleus active in the previous 6 h (searched up to 100 km);
+  - `reappeared`: the birth place had detections within 6 km 6–48 h earlier, i.e. a fire reappearing after a gap (night, cloud, smoke) rather than a new ignition.
+
+Results:
+- 25,954 nuclei (24,690 events); 7,264 nuclei with ≥ 10 detections. 10.8 % of the events with ≥ 10 detections contain ≥ 2 nuclei (median 1, max 44).
+- Nuclei with ≥ 3 detections: 14,346. 1,069 of them are born after the first nucleus of their event; at birth they are a median 8.9 km from the nearest active detection (just beyond the 6 km link distance: separate fires, spotting or fronts reappearing).
+- **32 % of the nuclei with ≥ 3 detections are reappearances** (same place active 6–48 h before), not new ignitions. They must not be used as ignition candidates.
+- Diagnostics (as in 3.1): share of ICNF fires ≥ 100 ha sharing their group with another fire: events 30.8 % → nuclei 23.0 %. Isolated fires with ≥ 90 % of their hotspots in one group: events 88.7 % → nuclei 87.2 % (nuclei split a few isolated fires, e.g. after jumps > 6 km).
+
+Distance and lag from each ICNF fire's ignition to its event start (centroid of the event's first time step) vs. to the birth of its own nucleus (ICNF fires ≥ 100 ha 2004–2019 with an event; position = order of ICNF start among the fires linked to the same event):
+
+| Position in event | Fires | Median distance event → nucleus | ≤ 5 km event → nucleus | Median lag event → nucleus | Nucleus shared with another fire |
+|---|---|---|---|---|---|
+| alone in event | 1,254 | 4.3 → 4.2 km | 65 % → 68 % | +0.2 → +0.2 h | 0 % |
+| first in shared event | 198 | 5.5 → 4.9 km | 43 % → 54 % | +0.2 → +0.3 h | 77 % |
+| later in shared event | 361 | 11.1 → 6.3 km | 18 % → 36 % | −8.5 → −3.4 h | 73 % |
+
+Same for 2017-10-15: later fires 16.7 → 5.0 km, ≤ 5 km 13 % → 50 %, lag −5.8 → −0.8 h (16 fires).
+
+Conclusions:
+- Nuclei roughly **halve the error for fires that join a burning event** (median 11.1 → 6.3 km; twice as many within 5 km) and leave alone/first fires unchanged (~4–5 km, +0.2 h: the "first hotspot" baseline, consistent with 2.1).
+- They do not solve everything: about three quarters of the fires in shared events still share their nucleus with another ICNF fire. These fires start within ~1–2 SEVIRI pixels (≤ 6 km) of a front that is already burning, so their first nearby detection belongs to the existing nucleus. At SEVIRI resolution and with this rule they cannot be separated.
+- For step 2 (linking to ICNF): link ICNF fires to nuclei, not events; ignore reappeared nuclei as ignition candidates; when several ICNF fires point to the same nucleus, give it to the fire whose start fits the birth time and flag the others as unresolved. The 1,254 fires alone in their event (plus the first fires of shared events) are the cleanest labelled set.
+
+## 4. Model data design (draft)
+
+### 4.0 Change of approach (2026-10-08)
+
+Discussion: if the clustering of 3.1–3.2 decides which hotspots the model sees, it already does part of the work the model should do (assigning hotspots to ignitions), and its errors become the model's errors. Decision (to confirm with the supervisor):
+- **Main model: ignition heatmaps from raw FRP sequences.** Input = all detections in a space–time window, no clustering. Target = a heatmap with a Gaussian bump at *every* ICNF ignition in the window (0, 1 or many), i.e. the "ignition probability map" of the proposal. The assignment of hotspots to ignitions is left to the model; no hotspot is assigned by hand. Evaluation: peaks of the predicted map matched to ICNF ignitions within k km → detection rate, false alarms, localisation error (matching only for scoring).
+- The clustering (events/nuclei) stays as **baseline** (first hotspot / nucleus birth, ~4–5 km for clean fires), as **analysis tool** (results for isolated vs. merged fires) and as **ablation** (clustered vs. raw input).
+- Other options kept in mind: predicting a per-pixel burn time (ignition = earliest), burned-area perimeters (ICNF/EFFIS) as extra supervision, self-supervised pre-training on the unlabelled hotspots.
+
+### 4.1 Is the available data enough? (2026-10-08)
+
+Script: `src/tiling_design.py`; numbers in `outputs/tiling_design_log.txt`.
+
+ICNF fires 2004–2019 with valid coordinates that SEVIRI sees, defined as a detection within 5 km of the ignition point in [start − 1 h, start + 6 h] (6 h so that the signal falls inside the input window of 4.2; a 12 h version gave slightly higher numbers, e.g. 2,813 instead of 2,705 fires ≥ 50 ha):
+
+| Size | Fires | Seen by SEVIRI | Days with ≥ 1 seen fire |
+|---|---|---|---|
+| ≥ 10 ha | 10,911 | 5,490 (50 %) | 1,382 |
+| ≥ 50 ha | 3,869 | 2,705 (70 %) | 910 |
+| ≥ 100 ha | 2,311 | 1,738 (75 %) | 663 |
+| ≥ 500 ha | 630 | 526 (83 %) | 257 |
+
+Seen fires per year (≥ 50 ha / ≥ 100 ha): 2004 177/118, 2005 494/347, 2006 117/80, 2007 55/26, 2008 37/16, 2009 168/97, 2010 191/117, 2011 149/82, 2012 176/109, 2013 275/187, 2014 51/27, 2015 140/82, 2016 249/170, 2017 302/209, 2018 34/19, 2019 90/52. **42 % of the seen fires ≥ 100 ha come from 2005, 2016 and 2017.**
+
+Assessment: enough for a first model, but tight.
+- For: each fire gives several training samples (crops, rotations/flips, time windows), the inputs are small (32 × 32 pixels × 96 steps, few channels), there are 568k unlabelled detections for pre-training, and the baseline to beat is modest (~4–5 km).
+- Against: very uneven years (2008: 16 seen fires ≥ 100 ha, 2018: 19), coarse pixels (3.2 × 4.5 km) and uncertain ignition coordinates limit the achievable precision, and the hardest cases (ignitions next to active fronts) number only a few hundred.
+- What would help most: (1) SEVIRI FRP for 2020–2023 (ICNF labels already exist; 2022 was a large fire year) — to ask the supervisor; (2) using fires ≥ 50 ha as targets (~1,000 more than ≥ 100 ha); (3) pre-training on unlabelled detections; (4) later the European extension.
+
+### 4.2 Sample design (draft, 2026-10-08)
+
+Script and numbers: as 4.1; example sample `figures/tiling/example_sample.png`.
+
+**Grid: the native SEVIRI pixel grid.** The SEVIRI pixel centres (irregular in lat/lon) can be mapped back exactly to the satellite's own pixel grid with the geostationary projection (`+proj=geos +h=35785831 +a=6378169 +b=6356583.8 +lon_0=0 +sweep=y`, pixel size 3,000.403 m at nadir; row = y / pixel size, col = x / pixel size, rounded):
+- Tested sub-satellite longitudes 0°, −3.4°, 3.5°, 9.5°: only **0°** fits (93–96 % of the pixels within ±0.25 px of a grid node in every year, vs. 28–47 % for the others, ~25 % expected by chance), so all of 2004–2019 is on one fixed grid.
+- All 8,402 distinct pixels map to distinct native pixels (no collisions); max residual 0.42 px (from the 2-decimal rounding of lat/lon).
+- Domain: 177 rows × 106 columns. One pixel over Portugal ≈ 3.2 km E–W × 4.3–4.8 km N–S.
+- Advantage: no resampling, each input cell is one real SEVIRI pixel; ICNF ignitions get continuous (sub-pixel) native coordinates.
+
+**Time windows.**
+- 12 h target periods starting at 06:00 and 18:00 UTC (06 UTC is the diurnal minimum of fire activity, fig. 04, so few fires straddle the boundary). Each ICNF fire belongs to exactly one period.
+- Input per sample: 6 h history + 12 h target period + 6 h tail = 24 h = 96 time steps of 15 min. The history shows whether something was already burning; the tail guarantees ≥ 6 h of observation after every target ignition.
+- Input channels per step (first version): FRP (log(1 + FRP)), confidence, detection flag. Later: static layers (DEM, land cover, persistent-pixel flag) and meteorology (ERA5-Land), objective 4. Limitation: "no detection" and "cloud" cannot be distinguished (no cloud mask in the data).
+
+**Targets.**
+- Positive: ICNF fires ≥ 50 ha that start in the target period and are seen by SEVIRI (4.1) → Gaussian bump (σ = 1 pixel) at the continuous native position of the ignition. Optionally a second output with the ignition time within the period.
+- Ignore (no loss within 2 pixels): fires 10–50 ha and unseen fires ≥ 50 ha (they may or may not produce hotspots, the model should not be punished either way), and the pixels outside mainland Portugal (no labels in Spain).
+- Everything else: target 0, including ongoing fires that started before the period.
+
+**Crops and inference.** Train on 32 × 32-pixel crops (≈ 100 × 145 km; positives sampled more often, random flips/rotations), apply the (fully convolutional) model to the whole domain at test time, so no tiling is needed for evaluation.
+
+Numbers (2004-01-20 to 2019-12-30):
+- 11,648 target periods; 5,399 with detections in mainland Portugal; **1,147 with ≥ 1 target**; 4,254 with detections but no target (hard negatives, e.g. ongoing or small fires).
+- Targets per positive period: 1 → 624 periods, 2–5 → 429, 6–20 → 89, > 20 → 5 (max 31). 2,705 targets and 8,206 ignore regions in total.
+- Crops centred on a target fire:
+
+| Crop | ≈ km | Another target in the crop | Earlier detections in the crop (before the fire started) |
+|---|---|---|---|
+| 16 × 16 | 51 × 72 | 38.6 % | 68.5 % |
+| 32 × 32 | 102 × 144 | 56.5 % | 81.1 % |
+| 64 × 64 | 205 × 288 | 69.7 % | 90.6 % |
+
+  → Multi-target samples and ongoing activity in the input are the normal case, not the exception, which supports the heatmap formulation over "one fire per sample". The example (Lousã, 2017-10-15 06–18 UTC) has 12 target ignitions in one 32 × 32 crop.
+
+**Split (chronological, no information from the future):**
+
+| Split | Years | Target fires | Positive periods | Hard-negative periods |
+|---|---|---|---|---|
+| train | 2004–2014 | 1,890 (70 %) | 775 | 2,814 |
+| validation | 2015–2016 | 389 (14 %) | 160 | 543 |
+| test | 2017–2019 | 426 (16 %) | 212 | 897 |
+
+Note: the test set contains 2017, the most extreme year (Pedrógão, 2017-10-15). Alternative for robustness: leave-one-year-out cross-validation in addition.
+
+Open questions:
+- Target size threshold (50 vs. 100 ha) and σ of the bumps (1 px vs. scaled with label uncertainty).
+- 15-min steps vs. hourly aggregation (24 steps, fewer gaps, less detail).
+- Whether to use the 6 h-"seen" criterion for selecting targets in training only (evaluation should report all fires ≥ threshold, seen or not).
+- Handling of the 1,069 nuclei / fires born next to active fronts in the evaluation (report separately).

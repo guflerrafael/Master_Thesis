@@ -7,4 +7,5 @@ openpyxl==3.1.5        # reading the ICNF .xlsx file
 pyarrow==25.0.1        # parquet
 matplotlib==3.10.0
 fg-data-profiling==4.19.1  # profiling reports (src/eda.py, imported as data_profiling)
-geopandas==1.2.0       # country borders, point-in-polygon (src/eda_figures.py); pulls in shapely, pyogrio, pyproj
+geopandas==1.2.0       # country borders, point-in-polygon (src/eda_figures.py); pulls in shapely, pyogrio
+pyproj==3.7.2          # native SEVIRI grid (geostationary projection, src/tiling_design.py)
