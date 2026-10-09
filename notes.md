@@ -18,6 +18,8 @@ figures/clustering/ hotspot events and nuclei, case study 2017-10-15 (src/cluste
 figures/tiling/    example training sample                         (src/tiling_design.py)
 figures/dataset/   full-domain example sample                      (src/dataset.py)
 figures/baselines/ precision-recall curves of the baselines        (src/baselines.py)
+figures/model/    model vs. baseline precision-recall curves      (src/evaluate_model.py)
+models/           trained checkpoints (*.pt)                      (src/train.py)
 src/               all code
 ```
 
@@ -35,6 +37,8 @@ Run from the repository root, in this order:
 9. `.venv/bin/python src/build_dataset.py > outputs/build_dataset_log.txt`: sample index for the model (5.1)
 10. `.venv/bin/python src/dataset.py > outputs/dataset_check_log.txt`: checks of the sample builder + example figure (5.1)
 11. `.venv/bin/python src/baselines.py > outputs/baselines_log.txt`: baselines on train/validation (5.2, 5.3)
+12. `.venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt`: train the ConvLSTM (6.1; ~45 min on an M1 Pro GPU)
+13. `.venv/bin/python src/evaluate_model.py --name convlstm_v1 > outputs/convlstm_v1_eval.txt`: model vs. baseline on validation (6.2)
 
 ## 1. Data
 
@@ -506,3 +510,48 @@ Findings:
 - Removing reappeared nuclei raises precision at low recall but caps recall at ~0.63 (non-isolated targets drop from 0.74 to 0.54 @ 10 km). Many ICNF fires start where something burned 6–48 h before (probably rekindles, which ICNF records as new occurrences, and busy fire areas), so "reappeared" is not a safe "not an ignition" flag. It may still be useful as a model input.
 - Localisation is the weak point: median error of matches ~3.5 km @ 5 km and ~4.3 km @ 10 km, only about half of the targets have a prediction within 5 km. A model must improve AP @ 5 km in particular.
 - Isolated fires are almost always found within 10 km (95 %); the gap is in fires with neighbours (74 %), where the model has the most room.
+
+## 6. Models
+
+### 6.1 ConvLSTM v1: setup (2026-10-08)
+
+Scripts: `src/model.py` (network, loss), `src/train.py` (features, training crops, training loop, full-domain prediction and peak extraction), `src/evaluate_model.py`. PyTorch 2.14.1 installed into `.venv` (added to `requirements.txt`); training on the Apple M1 Pro GPU (MPS).
+
+Input features per model step (7 channels): per-hour maximum of log(1 + FRP), confidence and detection flag (the 96 15-min steps aggregated to **24 hourly steps** to keep training cheap; 15-min steps are an open question), a "target period" flag (hours 6–17 of the window), the normalised time, the mainland mask and the persistent-pixel flag.
+
+Network (`IgnitionConvLSTM`, 141,905 parameters): per-step encoder (2 × conv 3 × 3, 16 channels) → 2 ConvLSTM layers (Shi et al., 2015; 32 hidden channels, 3 × 3 kernels) → head (conv 3 × 3, 32 → 1) on the final hidden state → ignition heatmap logits. Fully convolutional: trained on crops, applied to the full 177 × 106 grid. Output bias initialised to a prior probability of 0.01.
+
+Loss: penalty-reduced focal loss of CenterNet (Zhou et al., 2019; α = 2, β = 4) on the Gaussian targets, positives = pixels with y ≥ 0.75 (the pixel nearest each sub-pixel ignition always qualifies), multiplied by the loss weight `w` (ignore regions, outside Portugal = 0), normalised by the number of positives.
+
+Training: per epoch 3,780 crops of 32 × 32 pixels from 2004–2014: one crop per target ignition (1,890; random shift ±8 px) and as many hard negatives (crop around a random detection in Portugal in a period without target, redrawn every epoch); random horizontal/vertical flips. AdamW (lr 1e-3, weight decay 1e-4), cosine schedule, batch 16, 20 epochs, gradient clipping at 5, seed 0. ~1.2 min per epoch on MPS.
+
+Validation every 2 epochs: full-domain prediction for the 844 validation periods with detections → local maxima (3 × 3) with probability ≥ 0.05, max. 50 per period, sub-pixel position from the probability-weighted 3 × 3 centroid → points scored with `src/evaluate.py` (5.2). The checkpoint with the best mean of AP @ 5 km and AP @ 10 km is kept (`models/convlstm_v1.pt`). Periods without any detection get no predictions. The test split is not touched.
+
+### 6.2 ConvLSTM v1: results on validation (2026-10-08)
+
+Training log: `outputs/convlstm_v1_log.txt`, `outputs/convlstm_v1_history.csv`; evaluation: `outputs/convlstm_v1_eval.txt`; figure `figures/model/convlstm_v1_pr_val.png`. (The run was restarted manually with the same configuration; the re-evaluation of the saved checkpoint reproduces the logged numbers exactly.)
+
+- Training loss 2.43 → 0.80; best checkpoint at epoch 20 (also the last).
+- Validation AP during training (every 2 epochs): AP @ 10 km rises steadily (0.53 → 0.66); **AP @ 5 km fluctuates strongly between epochs (0.14–0.30)**, i.e. the precise position of the peaks is not stable yet.
+
+Validation 2015–2016, 389 target ignitions:
+
+| Method | k | AP | Recall (all preds) | Best F1 (P / R) | False alarms/day @ best F1 | Median error TP | Nearest pred ≤ 5 km |
+|---|---|---|---|---|---|---|---|
+| baseline: nucleus birth | 5 km | 0.237 | 0.51 | 0.40 (0.42 / 0.39) | 0.28 | 3.6 km | 53 % |
+| **ConvLSTM v1** | 5 km | **0.302** | **0.60** | **0.45** (0.45 / 0.44) | 0.29 | **3.1 km** | **62 %** |
+| baseline: nucleus birth | 10 km | 0.569 | 0.79 | 0.64 (0.68 / 0.59) | 0.15 | 4.3 km | |
+| **ConvLSTM v1** | 10 km | **0.664** | **0.87** | **0.69** (0.72 / 0.65) | 0.13 | **4.0 km** | |
+
+Recall (all predictions) by subgroup, 10 km / 5 km: isolated fires 0.99 / 0.76 (baseline 0.95 / 0.72); **fires with neighbours 0.83 / 0.55 (baseline 0.74 / 0.45)**; ≥ 1,000 ha 0.93 / 0.70 (baseline 0.73 / 0.57).
+
+Interpretation:
+- The first ConvLSTM, without covariates and with hourly steps, **beats the nucleus-birth baseline on every metric**: AP +0.07 (5 km) and +0.10 (10 km), its precision–recall curve lies above the baseline almost everywhere, and the median error of matches drops by ~0.3–0.4 km.
+- The gain is largest where the hand-made clustering is weakest: fires with neighbours (+9–10 points recall) and large fires (+20 points at 10 km). It shows the model can separate ignitions from raw input better than the clustering rule.
+- Localisation remains the limit: median error ~3 km at 5 km matching, ~1 pixel; 38 % of targets have no prediction within 5 km.
+
+Caveats:
+- One run, one seed. The checkpoint was selected on the validation split, so these validation numbers are slightly optimistic; the unbiased number will come from the locked test split.
+- AP @ 5 km is unstable between epochs; more runs/seeds are needed before drawing fine conclusions.
+
+Next steps (candidates): repeat with several seeds (variance); 15-min steps vs. hourly; longer training / learning-rate schedule; ablations (clustered vs. raw input, without time/static channels); covariates (DEM, land cover, ERA5-Land wind); then the CNN + Transformer model; final evaluation on the test split.

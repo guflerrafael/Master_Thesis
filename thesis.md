@@ -2,7 +2,7 @@
 
 > Purpose: single source of truth for future work on this project. It consolidates the thesis proposal (`infos.txt`), the supervisor's messages, the two datasets in `data/raw/` and an independent data audit done when this file was first written (2026-10-01). Numbers marked **[audit]** were computed directly from the raw files, not copied from the proposal.
 >
-> Last updated 2026-10-08. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, sample index + sample builder + evaluation protocol + baselines done (see §13–15). No model trained yet (PyTorch not installed). Step-by-step methods log, with every decision and row count: `notes.md`.
+> Last updated 2026-10-09. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, sample index + sample builder + evaluation protocol + baselines done (see §13–15). First ConvLSTM trained and beats the baseline on validation (see §16). Step-by-step methods log, with every decision and row count: `notes.md`.
 
 ---
 
@@ -70,10 +70,14 @@ Master_Thesis/
 │   ├── build_dataset.py       sample index for the heatmap model
 │   ├── dataset.py             dense samples on demand (FireData.sample) + checks
 │   ├── evaluate.py            matching + metrics (AP, recall, error, by subgroup)
-│   └── baselines.py           nucleus-birth baselines → figures/baselines/
+│   ├── baselines.py           nucleus-birth baselines → figures/baselines/
+│   ├── model.py               ConvLSTM network + focal loss
+│   ├── train.py               training crops, training loop, full-domain prediction
+│   └── evaluate_model.py      checkpoint vs. baseline on validation → figures/model/
+├── models/                    trained checkpoints (convlstm_v1.pt)
 ├── outputs/profiling/{raw,processed}/{icnf,seviri}_eda_report.html
 ├── outputs/*_log.txt          numbers printed by the scripts
-├── figures/{eda,clustering,tiling,dataset,baselines}/
+├── figures/{eda,clustering,tiling,dataset,baselines,model}/
 ├── documents/papers/          reference PDFs (not in git)
 ├── notes.md           methods log (basis for the write-up)
 ├── thesis.md          this file
@@ -85,7 +89,7 @@ Master_Thesis/
 Git repository (branch `main`, no remote yet), first commit 2026-10-07. No modelling code exists yet. Reproduce with the scripts in the order given in `notes.md` §0, run from the repository root.
 
 ### Environment
-Python 3.11 venv (`.venv/`, not in git). `requirements.txt` lists only what `src/` imports: pandas 2.3.3, numpy 2.3.5, scipy 1.16.3, openpyxl 3.1.5, pyarrow 25.0.1, matplotlib 3.10.0, fg-data-profiling 4.19.1 (imported as `data_profiling`), geopandas 1.2.0, pyproj 3.7.2. The venv also contains seaborn, statsmodels, ydata-profiling and others not used by the code. **Not installed:** PyTorch/TensorFlow, scikit-learn, xarray, rasterio, netCDF/h5py — needed for the planned work (and `cdsapi` for ERA5-Land).
+Python 3.11 venv (`.venv/`, not in git). `requirements.txt` lists only what `src/` imports: pandas 2.3.3, numpy 2.3.5, scipy 1.16.3, openpyxl 3.1.5, pyarrow 25.0.1, matplotlib 3.10.0, fg-data-profiling 4.19.1 (imported as `data_profiling`), geopandas 1.2.0, pyproj 3.7.2, torch 2.14.1 (Apple M1 Pro GPU via MPS). The venv also contains seaborn, statsmodels, ydata-profiling and others not used by the code. **Not installed:** scikit-learn, xarray, rasterio, netCDF/h5py — needed for the planned work (and `cdsapi` for ERA5-Land).
 
 ## 6. Datasets
 
@@ -178,7 +182,8 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 2. **Hotspot clustering (done 2026-10-08):** SEVIRI events and nuclei, case study 2017-10-15 (§14).
 3. **Sample design (drafted 2026-10-08, next: confirm with supervisor):** native grid, 12 h target periods with 24 h input, heatmap targets, ignore regions, chronological split (§14).
 4. **Dataset construction + baselines (done 2026-10-08):** sparse sample index + on-demand sample builder, evaluation protocol, nucleus-birth baselines (§15). Covariates (DEM, land cover, ERA5-Land) later.
-4b. **Next:** install PyTorch; first ConvLSTM on 32 × 32 crops, evaluated with `evaluate.py` against the baseline.
+4b. **First ConvLSTM (done 2026-10-08):** beats the baseline on validation (§16).
+4c. **Next:** several seeds (variance), 15-min vs. hourly steps, ablations, covariates.
 5. **Model 1 — ConvLSTM**, target: ignition heatmap (probability map); ablation on sequence length, covariates and clustered vs. raw input.
 6. **Model 2 — CNN + Transformer**, same targets and splits.
 7. **Evaluation & XAI:** detection rate, false alarms, localisation error (peaks matched to ICNF within k km), separately for isolated vs. merged fires; generalisation by size/vegetation/region, compute cost; saliency/attention analysis.
@@ -231,3 +236,9 @@ Details and numbers in `notes.md`.
 - **Sample index** (`data/processed/model/`, 7 MB, sparse): 568,123 detections on the native grid, 10,911 fires ≥ 10 ha, 2,705 targets / 8,427 ignore labels, 11,648 periods, static masks. `FireData.sample(period, crop)` builds x (96 × 3 × h × w), heatmap y and loss weight w on demand (21.6 MB for the full domain). Refinements: ±1 h boundary ignores; targets win over ignore regions (otherwise 11 % of targets had no loss at their own pixel). All checks pass.
 - **Evaluation:** predicted points matched per period to targets within 5 / 10 km (ignore fires neither TP nor FP, Spain excluded); AP, recall, best F1, false alarms/day, median error, recall for isolated vs. non-isolated and by size. **Test 2017–2019 locked.**
 - **Baseline to beat** (every nucleus birth = a predicted ignition, scored by its FRE in the input window), validation 2015–2016: **AP 0.24 @ 5 km, 0.57 @ 10 km**; recall (all predictions) 0.79 @ 10 km (isolated 0.95, non-isolated 0.74); median error of matches 4.3 km. Filtering out "reappeared" nuclei lowers recall to 0.64 — many ICNF fires start where something burned shortly before (rekindles?).
+
+## 16. First model: ConvLSTM v1 (2026-10-08, `notes.md` §6)
+
+- Input: 24 hourly steps (max of the 15-min steps) × 7 channels (FRP, confidence, detected, target-period flag, time, mainland mask, persistent pixels); encoder → 2 ConvLSTM layers (32 ch) → heatmap head; 141,905 parameters; CenterNet focal loss with ignore weights; 32 × 32 crops (targets + hard negatives, flips), 20 epochs, ~1.2 min/epoch on MPS. Prediction on the full grid, peaks → points, scored like the baseline.
+- **Validation 2015–2016: AP 0.30 @ 5 km (baseline 0.24), 0.66 @ 10 km (0.57)**; recall 0.87 @ 10 km (0.79); fires with neighbours 0.83 (0.74); median error of matches 3.1 / 4.0 km (3.6 / 4.3).
+- Caveats: one seed; checkpoint chosen on validation (slightly optimistic); AP @ 5 km unstable between epochs (0.14–0.30). Test 2017–2019 still locked.

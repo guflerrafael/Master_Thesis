@@ -1,0 +1,17 @@
+checkpoint convlstm_v1: epoch 20, config {'name': 'convlstm_v1', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'step_agg': 4, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 0}
+
+Validation (val, 2015–2016):
+                 method  k [km]  targets    AP  recall (all preds)  best F1  P @ best F1  R @ best F1  false alarms / day @ best F1  median error TP [km]  nearest pred ≤ 5 km  nearest pred median [km]
+baseline: nucleus birth       5      389 0.237               0.514    0.404        0.424        0.386                         0.279                 3.573                0.527                     4.782
+baseline: nucleus birth      10      389 0.569               0.792    0.635        0.683        0.594                         0.146                 4.312                0.527                     4.782
+ ConvLSTM (convlstm_v1)       5      389 0.302               0.602    0.445        0.451        0.440                         0.285                 3.140                0.620                     4.323
+ ConvLSTM (convlstm_v1)      10      389 0.664               0.871    0.686        0.722        0.653                         0.134                 4.006                0.620                     4.323
+
+Recall with all predictions, by subgroup:
+                 method  k [km]  recall | isolated=False  recall | isolated=True  recall | size_class=100–500  recall | size_class=500–1k  recall | size_class=50–100  recall | size_class=≥1k
+baseline: nucleus birth       5                    0.445                   0.722                        0.448                       0.537                       0.584                    0.567
+baseline: nucleus birth      10                    0.740                   0.948                        0.801                       0.707                       0.818                    0.733
+ ConvLSTM (convlstm_v1)       5                    0.548                   0.763                        0.564                       0.537                       0.650                    0.700
+ ConvLSTM (convlstm_v1)      10                    0.832                   0.990                        0.856                       0.902                       0.869                    0.933
+
+figure: figures/model/convlstm_v1_pr_val.png
