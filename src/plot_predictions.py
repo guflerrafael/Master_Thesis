@@ -24,7 +24,7 @@ import grid as G
 from dataset import FRP_NORM, FireData
 from evaluate import evaluate
 from model import IgnitionConvLSTM
-from train import MODELS, features, heatmap_to_points, predict, static_crop
+from train import MODELS, features, get_device, heatmap_to_points, predict, static_crop
 
 FIG = E.ROOT / "figures" / "model"
 PROB_VMAX = 0.6   # colour scale of the probability panels (model output stays below ~0.6)
@@ -44,7 +44,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="convlstm_v1")
     args = ap.parse_args()
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = get_device()
     ck = torch.load(MODELS / f"{args.name}.pt", map_location=device, weights_only=False)   # own checkpoint
     model = IgnitionConvLSTM(in_ch=7).to(device)
     model.load_state_dict(ck["state_dict"]); model.eval()

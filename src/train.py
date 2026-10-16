@@ -36,6 +36,13 @@ MODELS = E.ROOT / "models"
 OUTPUTS = E.ROOT / "outputs"
 
 
+def get_device():
+    """NVIDIA GPU (e.g. Google Colab) > Apple GPU (MPS) > CPU."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+
 # ---------------------------------------------------------------- features
 
 def features(x, static, step_agg):
@@ -157,7 +164,7 @@ def main():
     args = ap.parse_args()
 
     torch.manual_seed(args.seed); np.random.seed(args.seed)
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = get_device()
     data = FireData()
     train = CropSet(data, "train", args.step_agg, seed=args.seed)
     val_periods = data.periods.loc[(data.periods["split"] == "val") & (data.periods["n_det"] > 0), "period"]

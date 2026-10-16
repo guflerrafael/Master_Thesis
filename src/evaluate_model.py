@@ -18,7 +18,7 @@ from baselines import predictions as baseline_predictions
 from dataset import FireData
 from evaluate import evaluate
 from model import IgnitionConvLSTM
-from train import MODELS, predict
+from train import MODELS, get_device, predict
 
 FIG = E.ROOT / "figures" / "model"
 SPLIT = "val"
@@ -29,7 +29,7 @@ def main():
     ap.add_argument("--name", default="convlstm_v1")
     args = ap.parse_args()
     FIG.mkdir(parents=True, exist_ok=True)
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = get_device()
     # own checkpoint written by src/train.py (v1 stored numpy scalars in its metrics)
     ck = torch.load(MODELS / f"{args.name}.pt", map_location=device, weights_only=False)
     model = IgnitionConvLSTM(in_ch=7).to(device)
