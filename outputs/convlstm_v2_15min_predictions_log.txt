@@ -1,0 +1,7 @@
+best-F1 threshold (val, 10 km): p ≥ 0.417
+2016-08-07 06:00: most targets: 31 targets, 13 ignore, 19 predicted points ≥ threshold, max p 0.54
+2016-09-05 18:00: 2–5 targets (random): 3 targets, 4 ignore, 4 predicted points ≥ threshold, max p 0.49
+2016-07-30 06:00: 1 target (random): 1 targets, 1 ignore, 1 predicted points ≥ threshold, max p 0.49
+2015-11-14 18:00: no target, fires burning (random): 0 targets, 0 ignore, 0 predicted points ≥ threshold, max p 0.03
+figure: figures/model/convlstm_v2_15min_predictions_val.png
+figure: figures/model/convlstm_v2_15min_predictions_val_zoom.png

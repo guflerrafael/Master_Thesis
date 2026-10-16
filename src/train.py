@@ -7,8 +7,13 @@ Validation: full-domain prediction for every validation period with detections, 
 points, scored with src/evaluate.py (k = 5 and 10 km). The best epoch (mean of AP@5 and
 AP@10) is kept. The test split is never touched here.
 
+Time resolution: --step-agg sets how many 15-min slots form one model step
+(4 = hourly, 24 steps, v1; 1 = native 15 min, 96 steps, v2). Each step is the maximum over
+its slots. 15-min steps make training ~4x slower and use ~4x more activation memory.
+
 Run from the repository root:
   .venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt
+  .venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt
   .venv/bin/python src/train.py --name smoke --epochs 1 --max-batches 5 --val-periods 20   (quick check)
 """
 import argparse
@@ -34,9 +39,13 @@ OUTPUTS = E.ROOT / "outputs"
 # ---------------------------------------------------------------- features
 
 def features(x, static, step_agg):
-    """(96, 3, h, w) sample input -> (T', 7, h, w): per-hour max of FRP / confidence / detected,
+    """(96, 3, h, w) sample input -> (T', 7, h, w) with T' = 96 / step_agg: maximum over each
+    group of step_agg 15-min slots of FRP / confidence / detected (step_agg = 1: native slots),
     'inside target period' flag, normalised time, mainland mask, persistent-pixel flag."""
     T, C, h, w = x.shape
+    assert T % step_agg == 0 and (HISTORY_H * 4) % step_agg == 0 and (PERIOD_H * 4) % step_agg == 0, \
+        "step_agg must divide the window and the period boundaries"
+
     t_ = T // step_agg
     xa = x.reshape(t_, step_agg, C, h, w).max(1)
     t = np.arange(t_)

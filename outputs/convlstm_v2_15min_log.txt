@@ -1,0 +1,22 @@
+device mps; parameters 141,905; train crops per epoch 3,780 (1,890 positive); validation periods 844; config {'name': 'convlstm_v2_15min', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'step_agg': 1, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 0}
+{"epoch": 1, "train_loss": 2.4332, "train_min": 4.4455}
+{"epoch": 2, "train_loss": 1.9485, "train_min": 4.3788, "AP@5": 0.1124, "recall@5": 0.4087, "F1@5": 0.2517, "median_err@5": 3.5902, "AP@10": 0.4268, "recall@10": 0.7661, "F1@10": 0.5332, "median_err@10": 4.9134, "val_min": 3.3505, "saved": true}
+{"epoch": 3, "train_loss": 1.024, "train_min": 4.3794}
+{"epoch": 4, "train_loss": 0.9452, "train_min": 4.4331, "AP@5": 0.2587, "recall@5": 0.581, "F1@5": 0.3844, "median_err@5": 3.4614, "AP@10": 0.5617, "recall@10": 0.8535, "F1@10": 0.5869, "median_err@10": 4.1824, "val_min": 3.4618, "saved": true}
+{"epoch": 5, "train_loss": 0.9278, "train_min": 4.4131}
+{"epoch": 6, "train_loss": 0.8957, "train_min": 4.4478, "AP@5": 0.2507, "recall@5": 0.5835, "F1@5": 0.3841, "median_err@5": 3.2478, "AP@10": 0.6013, "recall@10": 0.8638, "F1@10": 0.6132, "median_err@10": 4.1485, "val_min": 3.5406, "saved": true}
+{"epoch": 7, "train_loss": 0.8846, "train_min": 4.4338}
+{"epoch": 8, "train_loss": 0.8757, "train_min": 4.4602, "AP@5": 0.3073, "recall@5": 0.635, "F1@5": 0.4433, "median_err@5": 3.1793, "AP@10": 0.6242, "recall@10": 0.8715, "F1@10": 0.6366, "median_err@10": 3.8831, "val_min": 3.448, "saved": true}
+{"epoch": 9, "train_loss": 0.8738, "train_min": 4.3955}
+{"epoch": 10, "train_loss": 0.8485, "train_min": 4.5015, "AP@5": 0.1296, "recall@5": 0.4165, "F1@5": 0.281, "median_err@5": 3.7633, "AP@10": 0.6443, "recall@10": 0.8483, "F1@10": 0.6667, "median_err@10": 5.0905, "val_min": 3.4939}
+{"epoch": 11, "train_loss": 0.8375, "train_min": 4.383}
+{"epoch": 12, "train_loss": 0.8401, "train_min": 4.4163, "AP@5": 0.343, "recall@5": 0.6247, "F1@5": 0.4728, "median_err@5": 3.2046, "AP@10": 0.6651, "recall@10": 0.8689, "F1@10": 0.6715, "median_err@10": 3.9362, "val_min": 3.5241, "saved": true}
+{"epoch": 13, "train_loss": 0.8277, "train_min": 4.4199}
+{"epoch": 14, "train_loss": 0.8232, "train_min": 4.4646, "AP@5": 0.3482, "recall@5": 0.635, "F1@5": 0.4804, "median_err@5": 3.1614, "AP@10": 0.6722, "recall@10": 0.874, "F1@10": 0.6763, "median_err@10": 3.8824, "val_min": 3.5094, "saved": true}
+{"epoch": 15, "train_loss": 0.8185, "train_min": 4.4456}
+{"epoch": 16, "train_loss": 0.8065, "train_min": 4.4552, "AP@5": 0.2331, "recall@5": 0.5296, "F1@5": 0.3761, "median_err@5": 3.5102, "AP@10": 0.6674, "recall@10": 0.8689, "F1@10": 0.6765, "median_err@10": 4.3838, "val_min": 3.5778}
+{"epoch": 17, "train_loss": 0.7979, "train_min": 4.3952}
+{"epoch": 18, "train_loss": 0.7922, "train_min": 4.4563, "AP@5": 0.3221, "recall@5": 0.6067, "F1@5": 0.452, "median_err@5": 3.254, "AP@10": 0.6801, "recall@10": 0.8715, "F1@10": 0.6931, "median_err@10": 4.0431, "val_min": 3.4934}
+{"epoch": 19, "train_loss": 0.7931, "train_min": 4.3901}
+{"epoch": 20, "train_loss": 0.7989, "train_min": 4.3709, "AP@5": 0.332, "recall@5": 0.6144, "F1@5": 0.4613, "median_err@5": 3.2556, "AP@10": 0.6795, "recall@10": 0.8715, "F1@10": 0.693, "median_err@10": 3.9806, "val_min": 3.4688}
+best mean AP (val) 0.5102; checkpoint models/convlstm_v2_15min.pt

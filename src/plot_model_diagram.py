@@ -3,9 +3,12 @@
 Top: data flow with layer sizes and parameter counts (taken from src/model.py).
 Bottom: the network unrolled over the 24 hourly steps (history / target period / tail).
 
+Second figure (detail): (a) inside one ConvLSTM cell, (b) receptive field growth through the
+stacked 3x3 convolutions within one time step, (c) growth over time through the recurrence.
+
 Run from the repository root:
   .venv/bin/python src/plot_model_diagram.py
-Outputs: figures/model/convlstm_v1_diagram.png and .pdf
+Outputs: figures/model/convlstm_v1_diagram.png / .pdf, figures/model/convlstm_cell_detail.png / .pdf
 """
 import matplotlib
 matplotlib.use("Agg")
@@ -34,6 +37,93 @@ def box(ax, x, y, w, h, text, face, edge=E.INK2, size=9, weight="normal"):
 def arrow(ax, x0, y0, x1, y1, color=E.INK2, lw=1.2, style="-|>", rad=0.0):
     ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle=style, mutation_scale=10, color=color, lw=lw,
                                  connectionstyle=f"arc3,rad={rad}", shrinkA=0, shrinkB=0))
+
+
+def text(ax, x, y, s, size=9, color=E.INK, **kw):
+    ax.text(x, y, s, fontsize=size, color=color, ha=kw.pop("ha", "center"), va=kw.pop("va", "center"), **kw)
+
+
+def grid(ax, x0, y0, n, cell, highlight=None, face=LIGHT_BLUE):
+    """n x n pixel grid with lower-left corner (x0, y0); highlight = list of (size, colour) squares
+    centred on the middle pixel, largest first."""
+    for (k, col) in highlight or []:
+        o = (n - k) / 2
+        ax.add_patch(Rectangle((x0 + o * cell, y0 + o * cell), k * cell, k * cell, facecolor=col, edgecolor="none"))
+    for a in range(n + 1):
+        ax.plot([x0, x0 + n * cell], [y0 + a * cell] * 2, color=E.BASE, lw=0.5)
+        ax.plot([x0 + a * cell] * 2, [y0, y0 + n * cell], color=E.BASE, lw=0.5)
+    m = (n - 1) / 2
+    ax.add_patch(Rectangle((x0 + m * cell, y0 + m * cell), cell, cell, facecolor=E.INK, edgecolor="none"))
+
+
+def detail_figure(p_l1, p_l2):
+    fig, ax = plt.subplots(figsize=(16, 11))
+    ax.set_xlim(0, 16); ax.set_ylim(0, 11); ax.axis("off")
+    text(ax, 0.2, 10.8, "Inside the ConvLSTM and how the receptive field grows", 13, weight="bold", ha="left", va="top")
+
+    # ---------------- (a) one ConvLSTM cell
+    text(ax, 0.2, 10.15, "(a) One ConvLSTM cell at time step t (layer 1: x = 16 encoder channels; layer 2: x = 32 channels of layer 1)",
+         10, weight="bold", ha="left")
+    box(ax, 0.3, 7.9, 1.6, 0.8, "input xₜ\n(16 or 32 ch)", LIGHT_BLUE, size=8.5)
+    box(ax, 0.3, 6.7, 1.6, 0.8, "hidden hₜ₋₁\n(32 ch)", LIGHT_BLUE, size=8.5)
+    box(ax, 2.5, 7.0, 1.3, 1.4, "concat\n(48 or 64 ch)", "white", size=8.5)
+    arrow(ax, 1.9, 8.3, 2.5, 7.95); arrow(ax, 1.9, 7.1, 2.5, 7.45)
+    box(ax, 4.4, 6.8, 2.2, 1.8, f"one Conv 3×3\n→ 4 × 32 = 128 ch\n\nonly spatial operation:\neach pixel sees its\n3×3 neighbourhood",
+        LIGHT_ORANGE, size=8.5)
+    arrow(ax, 3.8, 7.7, 4.4, 7.7)
+    gates = [("i: input gate", "σ", 9.2), ("f: forget gate", "σ", 8.35), ("o: output gate", "σ", 7.5), ("g: candidate", "tanh", 6.65)]
+    for name, fn, y in gates:
+        box(ax, 7.3, y - 0.3, 1.9, 0.6, f"{name}\n{fn}(·)", "white", size=8)
+        arrow(ax, 6.6, 7.7, 7.3, y, rad=0.0, lw=0.9)
+    box(ax, 10.0, 7.95, 3.0, 1.15, "cₜ = σ(f) ⊙ cₜ₋₁ + σ(i) ⊙ tanh(g)\nkeep part of the old memory,\nwrite part of the new content",
+        GREY, size=8.5)
+    box(ax, 10.0, 6.35, 3.0, 1.15, "hₜ = σ(o) ⊙ tanh(cₜ)\nwhat the layer passes on", GREY, size=8.5)
+    for y in (9.2, 8.35, 6.65):
+        arrow(ax, 9.2, y, 10.0, 8.5, lw=0.9)
+    arrow(ax, 9.2, 7.5, 10.0, 6.9, lw=0.9)
+    arrow(ax, 11.5, 7.95, 11.5, 7.5, lw=0.9)
+    box(ax, 10.0, 9.45, 3.0, 0.5, "memory cₜ₋₁ (32 ch, one per pixel)", LIGHT_BLUE, size=8)
+    arrow(ax, 11.5, 9.45, 11.5, 9.1, lw=0.9)
+    box(ax, 13.7, 7.95, 2.1, 0.8, "cₜ → step t + 1", LIGHT_BLUE, size=8.5)
+    box(ax, 13.7, 6.45, 2.1, 0.95, "hₜ → step t + 1\nand → next layer / head", LIGHT_BLUE, size=8.5)
+    arrow(ax, 13.0, 8.4, 13.7, 8.35); arrow(ax, 13.0, 6.9, 13.7, 6.9)
+    text(ax, 11.5, 5.95, "⊙ = element-wise per pixel: no exchange between pixels", 8.5, color=E.INK2)
+    text(ax, 5.5, 6.35, f"parameters: layer 1 {p_l1:,}, layer 2 {p_l2:,}\n(= weights of the gate convolution)", 8.5, color=E.INK2)
+
+    # ---------------- (b) receptive field within one time step
+    text(ax, 0.2, 5.25, "(b) Within one time step: every 3×3 convolution adds one pixel in each direction", 10, weight="bold", ha="left")
+    n, cell = 11, 0.33
+    shades = ["#eef5fd", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5"]
+    steps = [("encoder conv 1", 3), ("encoder conv 2", 5), ("ConvLSTM 1 gates", 7), ("ConvLSTM 2 gates", 9), ("head conv 3×3", 11)]
+    x0, y0 = 0.6, 0.9
+    hl = [(k, shades[len(steps) - 1 - j]) for j, (_, k) in enumerate(reversed(steps))]
+    grid(ax, x0, y0, n, cell, hl)
+    for j, (name, k) in enumerate(steps):
+        yy = y0 + n * cell - 0.3 - j * 0.62
+        ax.add_patch(Rectangle((x0 + n * cell + 0.35, yy - 0.16), 0.32, 0.32, facecolor=shades[j], edgecolor=E.BASE))
+        text(ax, x0 + n * cell + 0.8, yy, f"{name}: {k} × {k} px", 8.5, ha="left")
+    text(ax, x0 + n * cell / 2, y0 - 0.3, "black = output pixel; one pixel ≈ 3.2 × 4.5 km", 8, color=E.INK2)
+    text(ax, x0 + n * cell + 0.8, y0 + 0.25, "9 × 9 px ≈ 29 × 40 km after layer 2\n(only 7 × 7 with a single ConvLSTM layer)",
+         8, color=E.INK2, ha="left")
+
+    # ---------------- (c) over time
+    text(ax, 8.9, 5.25, "(c) Over time: hₜ₋₁ passes the 3×3 convolution again each step", 10, weight="bold", ha="left")
+    n, cell = 9, 0.24
+    for j, (label, k) in enumerate([("step t", 3), ("step t + 1", 5), ("step t + 2", 7)]):
+        gx = 8.95 + j * 2.35
+        grid(ax, gx, 1.55, n, cell, [(k, shades[j + 1])])
+        text(ax, gx + n * cell / 2, 1.2, f"{label}: {k} × {k}", 8.5)
+        if j:
+            arrow(ax, gx - 0.22, 1.55 + n * cell / 2, gx - 0.05, 1.55 + n * cell / 2, color=E.BLUE)
+    text(ax, 12.2, 0.55, "information from a neighbour arrives one step later, from a neighbour's neighbour two steps later …\n"
+         "in theory the whole crop is reachable after 24 steps; in practice the gates damp distant / old\n"
+         "signals, so the effective receptive field is much smaller (motivation for attention over time)",
+         8, color=E.INK2)
+
+    fig.savefig(FIG / "convlstm_cell_detail.png", dpi=200, bbox_inches="tight")
+    fig.savefig(FIG / "convlstm_cell_detail.pdf", bbox_inches="tight")
+    plt.close(fig)
+    print("figures: figures/model/convlstm_cell_detail.png / .pdf")
 
 
 def main():
@@ -123,6 +213,7 @@ def main():
     plt.close(fig)
     print(f"parameters: encoder {p_enc:,}, ConvLSTM 1 {p_l1:,}, ConvLSTM 2 {p_l2:,}, head {p_head:,}, total {total:,}")
     print("figures: figures/model/convlstm_v1_diagram.png / .pdf")
+    detail_figure(p_l1, p_l2)
 
 
 if __name__ == "__main__":

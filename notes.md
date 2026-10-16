@@ -39,8 +39,9 @@ Run from the repository root, in this order:
 11. `.venv/bin/python src/baselines.py > outputs/baselines_log.txt`: baselines on train/validation (5.2, 5.3)
 12. `.venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt`: train the ConvLSTM (6.1; ~45 min on an M1 Pro GPU)
 13. `.venv/bin/python src/evaluate_model.py --name convlstm_v1 > outputs/convlstm_v1_eval.txt`: model vs. baseline on validation (6.2)
-14. `.venv/bin/python src/plot_model_diagram.py`: architecture diagram (6.1)
+14. `.venv/bin/python src/plot_model_diagram.py`: architecture diagram (6.1) and ConvLSTM detail diagram (6.1.2)
 15. `.venv/bin/python src/plot_predictions.py --name convlstm_v1 > outputs/convlstm_v1_predictions_log.txt`: predicted vs. ICNF ignition maps (6.3)
+16. `.venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt`, then `src/evaluate_model.py --name convlstm_v2_15min` and `src/plot_predictions.py --name convlstm_v2_15min`: 15-min model (6.5)
 
 ## 1. Data
 
@@ -561,6 +562,22 @@ Validation every 2 epochs: full-domain prediction for the 844 validation periods
 - No cloud mask ("no fire" vs. "not visible"), no covariates (terrain, land cover, wind).
 - One seed; checkpoint chosen on validation; AP @ 5 km fluctuates strongly between epochs.
 
+#### 6.1.2 How the ConvLSTM cell works and why the receptive field grows
+
+Diagram: `figures/model/convlstm_cell_detail.png` / `.pdf` (`src/plot_model_diagram.py`): (a) one cell, (b) receptive field within one step, (c) over time.
+
+**One step of one layer.** Each layer keeps two maps from the previous step, both 32 channels × H × W: the hidden state h (what the layer outputs) and the memory c (what it remembers).
+1. *One 3×3 convolution* over the new input x_t (16 encoder channels for layer 1, layer 1's 32-channel h_t for layer 2) stacked with h_{t−1}: 48 (or 64) channels → 4 × 32 = 128 channels, split into input gate i, forget gate f, output gate o and candidate g (code: `self.gates = nn.Conv2d(in_ch + hid_ch, 4 * hid_ch, 3, padding=1)` in `src/model.py`). This is the only spatial operation of the cell: each gate value at a pixel depends on that pixel and its 8 neighbours, in the current input and in the previous hidden state. The parameters of a ConvLSTM layer are the weights of this one convolution (layer 1: 55,424; layer 2: 73,856).
+2. *Pixel-wise update* (⊙ = element-wise, no exchange between pixels): c_t = σ(f) ⊙ c_{t−1} + σ(i) ⊙ tanh(g) (keep part of the old memory, write part of the new content); h_t = σ(o) ⊙ tanh(c_t). σ (sigmoid) turns the gates into 0–1 "valves", tanh bounds values to −1…1.
+So every pixel has its own memory, but what it writes, keeps and forgets is decided from its 3×3 neighbourhood. Difference to a normal LSTM: matrix products over a flat vector are replaced by convolutions, so the state stays a map and the spatial structure is kept (Shi et al., 2015).
+
+**Receptive field** (the input area that can influence one output pixel). Every 3×3 convolution extends it by one pixel in each direction.
+- *Stacking, within one time step:* encoder conv 1 → 3 × 3, encoder conv 2 → 5 × 5, ConvLSTM 1 gates → 7 × 7, ConvLSTM 2 gates → 9 × 9 px (≈ 29 × 40 km), head conv → 11 × 11. With a single ConvLSTM layer it would stop at 7 × 7 per step.
+- *Recurrence, over time:* h_{t−1} passes the 3×3 convolution again at step t, so information from a neighbour arrives one step later, from a neighbour's neighbour two steps later, etc.; in theory the whole 32 × 32 crop is reachable after 24 steps.
+- *Effective vs. theoretical:* gates and repeated squashing damp distant/old signals, so the effective receptive field is much smaller than the theoretical one. This motivates more context per step (layers, channels, kernel size) or direct access to all time steps (attention, CNN + Transformer).
+
+**Why two ConvLSTM layers (a default, not yet tested).** (1) More spatial context per step (9 × 9 instead of 7 × 7 px) for a relational question ("which nearby hotspot came first, where did it spread from"); (2) stacked recurrent layers often split the work into fast/local (layer 1) and slower/abstract state (layer 2), as in the original ConvLSTM paper — not verified here; (3) still small (129k of 142k parameters; one 32-channel layer would be ~55k). Arguments for one layer: fewer parameters (overfitting with ~1,900 targets), easier to interpret, faster (relevant for 15-min steps). **Open experiment (ablation):** 1 vs. 2 vs. 3 layers and 16/32/64 channels, several seeds each (AP @ 5 km varies too much between single runs); until then "2 layers × 32 channels" must be described as a default choice.
+
 ### 6.2 ConvLSTM v1: results on validation (2026-10-08)
 
 Training log: `outputs/convlstm_v1_log.txt`, `outputs/convlstm_v1_history.csv`; evaluation: `outputs/convlstm_v1_eval.txt`; figure `figures/model/convlstm_v1_pr_val.png`. (The run was restarted manually with the same configuration; the re-evaluation of the saved checkpoint reproduces the logged numbers exactly.)
@@ -622,6 +639,41 @@ Two framings to keep apart in the thesis: *early detection* (short tail, operati
 3. Longer windows (history 24–48 h, tail 24–72 h) — early-detection vs. reconstruction framing.
 4. Stateful ConvLSTM across consecutive periods (Option A).
 5. Several seeds per configuration (variance; AP @ 5 km is unstable).
+5b. Depth/width ablation: 1 vs. 2 vs. 3 ConvLSTM layers, 16/32/64 channels (6.1.2).
 6. Final: retrain the chosen configuration on 2004–2016, evaluate once on 2017–2019; optionally leave-years-out cross-validation.
+
+
+### 6.5 ConvLSTM v2: native 15-min steps (2026-10-16)
+
+Open experiment 1 of 6.4: does the native time resolution help, especially the localisation (AP @ 5 km)?
+- Change: `--step-agg 1` → 96 steps of 15 min instead of 24 hourly maxima; everything else identical to v1 (architecture, 7 channels, loss, crops, 20 epochs, seed 0, selection on mean AP @ 5/10 km). The target-period flag covers steps 25–72, the time channel runs 0 → 1 over 96 steps. `features()` now checks that the step size divides the window and the period boundaries.
+- Evaluation and plotting read the step size from the checkpoint, so `evaluate_model.py` and `plot_predictions.py` work unchanged.
+- Expected cost: ~4× training time (~5 min/epoch on the M1 GPU, ~1.5–2 h for 20 epochs incl. validation) and ~4× activation memory (estimated ~3 GB at batch 16; reduce `--batch` if MPS runs out of memory — then also note it here, it changes the comparison).
+- Command: `.venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt`
+- Run done 2026-10-16 (by hand, configuration as above, batch 16 fit into memory): 4.4 min per training epoch (v1: 1.2), 3.5 min per full validation (v1: 1.0); best checkpoint at **epoch 14** (mean AP @ 5/10 km 0.510). Logs `outputs/convlstm_v2_15min_{log,history,eval,predictions_log}`, figures `figures/model/convlstm_v2_15min_{pr_val,predictions_val,predictions_val_zoom}.png`.
+
+**Result (validation 2015–2016, 389 targets):**
+
+| | baseline | v1 (hourly) | **v2 (15 min)** |
+|---|---|---|---|
+| AP @ 5 km | 0.237 | 0.302 | **0.348** |
+| AP @ 10 km | 0.569 | 0.664 | **0.672** |
+| recall (all preds) @ 5 / 10 km | 0.51 / 0.79 | 0.60 / 0.87 | **0.64 / 0.87** |
+| best F1 @ 5 km (P / R) | 0.40 (0.42 / 0.39) | 0.45 (0.45 / 0.44) | **0.48 (0.53 / 0.44)** |
+| best F1 @ 10 km (P / R) | 0.64 (0.68 / 0.59) | **0.69** (0.72 / 0.65) | 0.68 (0.77 / 0.60) |
+| false alarms/day @ best F1, 5 / 10 km | 0.28 / 0.15 | 0.29 / 0.13 | **0.21 / 0.10** |
+| median error of matches, 5 / 10 km | 3.6 / 4.3 km | 3.1 / 4.0 km | 3.2 / **3.9** km |
+| nearest prediction ≤ 5 km | 53 % | 62 % | **66 %** |
+| recall non-isolated, 5 / 10 km | 0.45 / 0.74 | 0.55 / 0.83 | **0.59 / 0.84** |
+| recall ≥ 1,000 ha, 5 / 10 km | 0.57 / 0.73 | 0.70 / 0.93 | **0.77 / 0.93** |
+
+Less dependent on the choice of the best epoch: mean of the last five validation evaluations (epochs 12–20): AP @ 5 km v1 0.282 ± 0.025 vs. **v2 0.316 ± 0.047**; AP @ 10 km v1 0.661 ± 0.005 vs. **v2 0.673 ± 0.007**. AP @ 5 km still jumps between evaluations (v2: 0.11–0.35 over the run; e.g. 0.23 at epoch 16).
+
+Interpretation:
+- Native 15-min steps help mainly the **precise localisation**: AP @ 5 km +0.05 (best epoch) / +0.03 (last-five mean), 4 points more targets with a prediction within 5 km, gains for fires with neighbours and large fires at 5 km. At 10 km the models are almost equal (+0.01 AP). This fits the expectation that the first 15-min observations of a fire carry the location.
+- v2 is also more conservative at its operating point: fewer false alarms (0.10 vs. 0.13 per day @ 10 km) at slightly lower recall.
+- The maps look like v1: the right areas, but close ignitions still merge (19 points for 31 ignitions on 2016-08-07; max p ≈ 0.54).
+- Cost: ~3.7× training time and ~3.5× validation time.
+- **Caveat:** one seed per model; the 5 km gain (+0.03–0.05) is about the size of the epoch-to-epoch fluctuation of AP @ 5 km (std 0.025–0.047 over the last evaluations). Encouraging but not yet conclusive — needs several seeds per configuration before choosing 15-min steps as the default.
 
 Next steps (candidates): repeat with several seeds (variance); 15-min steps vs. hourly; longer training / learning-rate schedule; ablations (clustered vs. raw input, without time/static channels); covariates (DEM, land cover, ERA5-Land wind); then the CNN + Transformer model; final evaluation on the test split.
