@@ -39,6 +39,8 @@ Run from the repository root, in this order:
 11. `.venv/bin/python src/baselines.py > outputs/baselines_log.txt`: baselines on train/validation (5.2, 5.3)
 12. `.venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt`: train the ConvLSTM (6.1; ~45 min on an M1 Pro GPU)
 13. `.venv/bin/python src/evaluate_model.py --name convlstm_v1 > outputs/convlstm_v1_eval.txt`: model vs. baseline on validation (6.2)
+14. `.venv/bin/python src/plot_model_diagram.py`: architecture diagram (6.1)
+15. `.venv/bin/python src/plot_predictions.py --name convlstm_v1 > outputs/convlstm_v1_predictions_log.txt`: predicted vs. ICNF ignition maps (6.3)
 
 ## 1. Data
 
@@ -47,10 +49,6 @@ Run from the repository root, in this order:
 - Portugal's official fire database, supplied by the supervisor as `ignic_ICNF.xlsx`
 - One row per fire: start (`Data`) and end (`DataFim`) date/time, municipality code (`Dicofre`), district (`Distrito`), municipality (`Concelho`), burned area in ha (`AA`), and from 2001 on the estimated ignition point (`lat`, `lon`)
 - 813,384 fires, 1980–2023
-- A ".csv" copy was made at first for easier handling but was found **not** to be lossless (checked 2026-10-07), and has since been deleted; the ".xlsx" is the only source:
-  - 31,799 `Data` and 39,286 `DataFim` values were shifted by −1 s (e.g. 14:30:00 → 14:29:59), all in 1989–1997 (floating-point rounding of Excel date serials during the export).
-  - The 1900-01-01 sentinel in `DataFim` became 1899-12-31 (Excel 1900 leap-year bug).
-  - All other columns were identical. The affected rows have no coordinates and lie outside the SEVIRI period, so the first exploration was not affected.
 - The first EDA (ydata-profiling of the raw ".xlsx") has been replaced by the raw/processed reports in 1.6.
 
 ### 1.2 SEVIRI FRP
@@ -519,6 +517,8 @@ Scripts: `src/model.py` (network, loss), `src/train.py` (features, training crop
 
 Input features per model step (7 channels): per-hour maximum of log(1 + FRP), confidence and detection flag (the 96 15-min steps aggregated to **24 hourly steps** to keep training cheap; 15-min steps are an open question), a "target period" flag (hours 6–17 of the window), the normalised time, the mainland mask and the persistent-pixel flag.
 
+Diagram: `figures/model/convlstm_v1_diagram.png` / `.pdf` (`src/plot_model_diagram.py`; parameter counts read from the model: encoder 3,344, ConvLSTM 1 55,424, ConvLSTM 2 73,856, head 9,281).
+
 Network (`IgnitionConvLSTM`, 141,905 parameters): per-step encoder (2 × conv 3 × 3, 16 channels) → 2 ConvLSTM layers (Shi et al., 2015; 32 hidden channels, 3 × 3 kernels) → head (conv 3 × 3, 32 → 1) on the final hidden state → ignition heatmap logits. Fully convolutional: trained on crops, applied to the full 177 × 106 grid. Output bias initialised to a prior probability of 0.01.
 
 Loss: penalty-reduced focal loss of CenterNet (Zhou et al., 2019; α = 2, β = 4) on the Gaussian targets, positives = pixels with y ≥ 0.75 (the pixel nearest each sub-pixel ignition always qualifies), multiplied by the loss weight `w` (ignore regions, outside Portugal = 0), normalised by the number of positives.
@@ -526,6 +526,40 @@ Loss: penalty-reduced focal loss of CenterNet (Zhou et al., 2019; α = 2, β = 4
 Training: per epoch 3,780 crops of 32 × 32 pixels from 2004–2014: one crop per target ignition (1,890; random shift ±8 px) and as many hard negatives (crop around a random detection in Portugal in a period without target, redrawn every epoch); random horizontal/vertical flips. AdamW (lr 1e-3, weight decay 1e-4), cosine schedule, batch 16, 20 epochs, gradient clipping at 5, seed 0. ~1.2 min per epoch on MPS.
 
 Validation every 2 epochs: full-domain prediction for the 844 validation periods with detections → local maxima (3 × 3) with probability ≥ 0.05, max. 50 per period, sub-pixel position from the probability-weighted 3 × 3 centroid → points scored with `src/evaluate.py` (5.2). The checkpoint with the best mean of AP @ 5 km and AP @ 10 km is kept (`models/convlstm_v1.pt`). Periods without any detection get no predictions. The test split is not touched.
+
+#### 6.1.1 Detailed description of the model (for the write-up)
+
+**Task.** For each 12 h target period (06–18 or 18–06 UTC) the model looks at 24 h of SEVIRI detections and outputs an ignition probability map on the native SEVIRI grid: per pixel, the probability that an ICNF fire ≥ 50 ha started there during the target period. Zero, one or many ignitions per map; no hand-made hotspot ↔ fire assignment.
+
+**Input.** One sample = 6 h history + 12 h target period + 6 h tail (history: was something already burning; tail: ≥ 6 h of observation after every possible ignition). The 96 15-min slots are aggregated to 24 hourly steps (maximum per hour). Seven channels per step: (1) log(1 + FRP)/log(1 + 1100); (2) confidence/100; (3) detected flag; (4) target-period flag (hours 7–18); (5) normalised time 0 → 1; (6) mainland mask; (7) persistent-pixel flag. Channels 4–5 tell the model *when* each step is, 6–7 *where*. A pixel without detection is 0 — "no fire" and "cloud" cannot be told apart. Tensor: (batch, 24, 7, H, W); training on 32 × 32 crops, inference on the full 177 × 106 grid.
+
+**Network** (141,905 parameters):
+- *Encoder* (3,344), applied to every hour with shared weights: Conv 3×3 (7→16) → ReLU → Conv 3×3 (16→16) → ReLU. Turns the raw channels into 16 local features per pixel (receptive field 5 × 5 px ≈ 16 × 22 km).
+- *Two ConvLSTM layers* (32 channels, 3×3 kernels; 55,424 and 73,856 parameters; Shi et al., 2015): an LSTM in which all matrix products are 3×3 convolutions, so hidden state and memory are maps (one memory per pixel, updated from its neighbourhood). Per hour t: [i, f, o, g] = Conv3×3([x_t, h_{t−1}]); c_t = σ(f) ⊙ c_{t−1} + σ(i) ⊙ tanh(g); h_t = σ(o) ⊙ tanh(c_t). Forget gate f decides what memory to keep, input gate i what to write, output gate o what to pass on. Layer 2 reads layer 1's h_t; both start at zero and run through all 24 hours.
+  Rationale: an ignition is a space–time pattern (a pixel lights up where nothing burned, then the fire spreads to its neighbours). The per-pixel memory can keep "this spot lit up first, at hour 9, and the fire spread north-east from it" — the signal for the origin — and from the history whether something was already burning.
+- *Head* (9,281), on the final hidden state of layer 2 only (after hour 24): Conv 3×3 (32→32) → ReLU → Conv 1×1 (32→1) → logit per pixel, sigmoid → probability. The output bias starts at probability 0.01 (ignitions are rare).
+- Fully convolutional: the same weights work on crops and on the full grid.
+
+**Target and loss.**
+- Target y: a Gaussian (σ = 1 px) at the sub-pixel position of every target ignition of the period (maximum where bumps overlap).
+- Loss weight w: 1 inside Portugal (+ 1-px border); 0 outside and within 2 px of every ignore fire (4.2, 5.1), but kept within 1 px of every target.
+- Loss: CenterNet focal loss (Zhou et al., 2019; α = 2, β = 4). Positive pixels (y ≥ 0.75, includes the pixel nearest each ignition): −(1 − p)² log p — a confident hit costs little, a miss a lot. All other pixels: −(1 − y)⁴ p² log(1 − p) — false positives are penalised, much less close to an ignition (being 1 px off is cheap, far off is expensive). Multiplied by w and divided by the number of positives. The focal terms prevent the ~1,000 easy "no ignition" pixels per crop from swamping the one or two positives.
+
+**Training.** Years 2004–2014. Per epoch 3,780 crops of 32 × 32 px (~100 × 145 km): 1,890 positives (one per target ignition, shifted ±8 px at random so targets are not always centred) and 1,890 hard negatives (crop around a random Portuguese detection in a period without target, redrawn each epoch, so the model learns that "fire present" ≠ "new ignition"). Random horizontal/vertical flips. AdamW (lr 1e-3, weight decay 1e-4), cosine schedule, batch 16, gradient clipping 5, 20 epochs, seed 0, ~1.2 min/epoch on the M1 GPU. Every 2 epochs a full validation (2015–2016); the checkpoint with the best mean AP @ 5/10 km is kept (epoch 20).
+
+**Inference: heatmap → points.** For every period with ≥ 1 detection: full-grid probability map → local maxima (3 × 3) with p ≥ 0.05, max. 50 per period → sub-pixel position from the probability-weighted 3 × 3 centroid → lat/lon via the geostationary projection → (period, lat, lon, score).
+
+**Scoring.** As for the baselines (5.2): per period, predictions by descending score match the nearest unmatched target within k = 5 / 10 km (hit), else ignored if within k km of an ignore fire, else false alarm; AP, recall, best F1, false alarms/day, median error, recall by subgroup.
+
+**Strengths.** Sees all detections at once, including neighbouring fires, and can learn which new hotspot is a new ignition and which a spreading front — the largest gain over the clustering is for fires with neighbours (recall 0.83 vs. 0.74 @ 10 km). Small (~140k parameters) for ~1,900 training targets; fast to train.
+
+**Limitations.**
+- Hourly steps blur the first 15-min observations of a fire, often the most informative for the location.
+- Single readout after hour 24: early information must survive ~18 h of updates. Reading out all steps or attention over time (the planned CNN + Transformer) would remove this bottleneck.
+- Ignitions closer than ~2 px merge into one peak (18 points for 31 ignitions on 2016-08-07, 6.3).
+- Probabilities peak at ~0.55; calibration not checked.
+- No cloud mask ("no fire" vs. "not visible"), no covariates (terrain, land cover, wind).
+- One seed; checkpoint chosen on validation; AP @ 5 km fluctuates strongly between epochs.
 
 ### 6.2 ConvLSTM v1: results on validation (2026-10-08)
 
@@ -553,5 +587,41 @@ Interpretation:
 Caveats:
 - One run, one seed. The checkpoint was selected on the validation split, so these validation numbers are slightly optimistic; the unbiased number will come from the locked test split.
 - AP @ 5 km is unstable between epochs; more runs/seeds are needed before drawing fine conclusions.
+
+
+### 6.3 Predicted vs. ICNF ignition maps (2026-10-16)
+
+Script: `src/plot_predictions.py`; figures `figures/model/convlstm_v1_predictions_val.png` (4 periods) and `convlstm_v1_predictions_val_zoom.png` (busiest period); log `outputs/convlstm_v1_predictions_log.txt`. Validation only.
+- Periods chosen by rule, not by hand: the validation period with most targets (2016-08-07 06 UTC, 31 targets), a random period with 2–5 targets (2016-09-05 18 UTC, 3), a random single-target period (2016-07-30 06 UTC, 1), a random period with detections but no target (2015-11-14 18 UTC); seed 0.
+- Predicted points shown above the best-F1 threshold at 10 km on the whole validation split: p ≥ 0.38. The probability colour scale is 0–0.6 (the model's maximum is ~0.55).
+- Observations: the single-target and 2–5-target periods are found exactly (1/1 and 3/3 predicted points next to the ICNF ignitions); the period without target has no prediction (max p 0.04). In the busy period the model marks the right areas, but **produces 18 points for 31 ignitions**: ignitions closer than ~2 pixels merge into one broad blob, so only one peak survives (3 × 3 peak extraction, σ = 1 px targets). Peak probabilities stay ≤ ~0.55, i.e. the model is cautious/uncalibrated.
+- Ideas from this: sharper heatmaps (smaller σ, longer training), a lower peak-extraction neighbourhood, or predicting a count/offset per peak; check calibration.
+
+
+### 6.4 Design discussion and open experiments (2026-10-16)
+
+**Training period.** Train 2004–2014 (1,890 targets, 70 %), validation 2015–2016 (389), test 2017–2019 (426) — a chronological split: (a) no leakage between simultaneous fires of the same outbreak (e.g. 51 fires on 2017-10-15) across splits, (b) mirrors operational use (train on the past, apply to later years), (c) validation for choices, test touched once. Cost: 30 % of the labelled fires are not used for training. Planned remedies: once the configuration is fixed, retrain on 2004–2016 (2,279 targets) and evaluate once on 2017–2019; leave-years-out cross-validation for robust estimates; SEVIRI 2020–2023 if obtainable.
+
+**Window length / multi-day propagation.** Every sample is independent and the ConvLSTM state is reset per sample: the model sees exactly 24 h (6 h history, 12 h period, 6 h tail) and nothing about multi-day evolution. Rationale: the label is the ignition within the 12 h; the most informative signal is the first hours of a fire; the history only has to show what already burned; short sequences keep training cheap. Weaknesses:
+- a fire that burned earlier, paused for > 6 h (night, cloud) and flares up again looks new (cf. 32 % reappeared nuclei, 3.2; rekindles in ICNF);
+- post-fire reconstruction of large multi-day fires could use the full spread (direction of growth points back to the origin), which the 6 h tail discards;
+- the single readout after hour 24 must carry early information through ~18 h; longer windows make this harder for this architecture.
+Two framings to keep apart in the thesis: *early detection* (short tail, operational) vs. *post-fire reconstruction* (long tail, full fire evolution).
+
+**Grid.** The model already works on the native SEVIRI pixel grid (reconstructed exactly, 4.2: 8,402 pixels → 8,402 cells, no resampling; ~3.2 × 4.5 km over Portugal). A finer grid would only interpolate; sub-pixel precision comes from sub-pixel target positions, sub-pixel peak refinement and the distribution of FRP over neighbouring pixels (median error ~3 km is already below the pixel diagonal of ~5.5 km). What is coarser than native is *time*: 15-min slots are aggregated to hourly steps in v1.
+
+**Feedback between consecutive samples.** Idea: pass information from period k into period k + 1, so the model effectively runs continuously through the season.
+- *Option A — stateful ConvLSTM:* carry the hidden/memory maps (h, c) from the end of period k into period k + 1. Unbounded, learned memory at the cost of 24 steps per period; matches operational use (one map every 12 h). Requires training on chunks of consecutive periods in time order (e.g. 6 periods = 3 days) with truncated backpropagation through time (gradients within a chunk, cut between chunks); fixed tiles or the full grid instead of jittered crops (state belongs to a place); sampling so that chunks with ignitions are frequent enough; warm-up of the state before validation/test; possibly a state reset after several days without detections to avoid drift.
+- *Option B — feed back as input channels:* the model's own previous prediction (risk: trained on perfect inputs, used with its own imperfect ones; errors can compound) or satellite-only summaries of the longer past, e.g. "hours since this pixel last burned (≤ 72 h)", "burned in the last 48 h". Samples stay independent; crops, shuffling and flips still work.
+- *Never feed back ICNF information* (earlier ignitions, areas, labels): not available in real use and a direct label leak in evaluation.
+- Recommendation: first Option B with satellite-only summary channels (cheap test whether longer memory helps), then, if it does, Option A as a stateful ConvLSTM; compare v1, v1 + summary channels and stateful on the same split.
+
+**Open experiments (in suggested order):**
+1. 15-min steps (96 steps) vs. hourly (v1).
+2. Long-history summary channels (Option B).
+3. Longer windows (history 24–48 h, tail 24–72 h) — early-detection vs. reconstruction framing.
+4. Stateful ConvLSTM across consecutive periods (Option A).
+5. Several seeds per configuration (variance; AP @ 5 km is unstable).
+6. Final: retrain the chosen configuration on 2004–2016, evaluate once on 2017–2019; optionally leave-years-out cross-validation.
 
 Next steps (candidates): repeat with several seeds (variance); 15-min steps vs. hourly; longer training / learning-rate schedule; ablations (clustered vs. raw input, without time/static channels); covariates (DEM, land cover, ERA5-Land wind); then the CNN + Transformer model; final evaluation on the test split.
