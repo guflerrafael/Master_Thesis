@@ -39,7 +39,7 @@ Run from the repository root, in this order:
 11. `.venv/bin/python src/baselines.py > outputs/baselines_log.txt`: baselines on train/validation (5.2, 5.3)
 12. `.venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt`: train the ConvLSTM (6.1; ~45 min on an M1 Pro GPU)
 13. `.venv/bin/python src/evaluate_model.py --name convlstm_v1 > outputs/convlstm_v1_eval.txt`: model vs. baseline on validation (6.2)
-14. `.venv/bin/python src/plot_model_diagram.py`: architecture diagram (6.1) and ConvLSTM detail diagram (6.1.2)
+14. `.venv/bin/python src/plot_model_diagram.py`: architecture diagram (6.1) and ConvLSTM detail diagram (6.1.2), concept diagram of the long-term memory (6.6)
 15. `.venv/bin/python src/plot_predictions.py --name convlstm_v1 > outputs/convlstm_v1_predictions_log.txt`: predicted vs. ICNF ignition maps (6.3)
 16. `.venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt`, then `src/evaluate_model.py --name convlstm_v2_15min` and `src/plot_predictions.py --name convlstm_v2_15min`: 15-min model (6.5)
 
@@ -677,3 +677,129 @@ Interpretation:
 - **Caveat:** one seed per model; the 5 km gain (+0.03–0.05) is about the size of the epoch-to-epoch fluctuation of AP @ 5 km (std 0.025–0.047 over the last evaluations). Encouraging but not yet conclusive — needs several seeds per configuration before choosing 15-min steps as the default.
 
 Next steps (candidates): repeat with several seeds (variance); 15-min steps vs. hourly; longer training / learning-rate schedule; ablations (clustered vs. raw input, without time/static channels); covariates (DEM, land cover, ERA5-Land wind); then the CNN + Transformer model; final evaluation on the test split.
+
+
+### 6.6 Long-term memory across periods: concept (draft, 2026-10-16)
+
+Goal: let the model use information older than the 6 h history, so that it "sees" fires that develop over several days. Extends two items of 6.4 (window length, feedback between consecutive samples) with two further ideas: an always-on feedback loop into the next sample, and a long-term gate that writes only relevant information. Concept only, no code yet; to discuss with the supervisor. The numbers below come from a quick check outside `src/` (preliminary); they will be redone as a script with the first memory experiment.
+
+Diagram of the recommended design (Option 4): `figures/model/convlstm_memory_concept.png` / `.pdf` (`src/plot_model_diagram.py`).
+
+**Why: how often older context matters**
+- Targets 2004–2016 (train + val, 2,279): detections near the ignition *before* the 24 h input window, i.e. information v2 cannot see. In brackets: earlier activity but an empty 6 h history ("pause > 6 h") — for v2 these fires look fresh although the place burned before.
+
+| Radius around the ignition | In the 6 h history (v2 sees it) | Before the window: last 24 h | last 48 h | last 7 d |
+|---|---|---|---|---|
+| 2 px (~7 km) | 15 % | 27 % (15 %) | 35 % (22 %) | 49 % (36 %) |
+| 5 px (~18 km) | 31 % | 50 % (23 %) | 59 % (31 %) | 74 % (44 %) |
+
+- Multi-day fires carry much of the signal: only 4.5 % of the events with ≥ 10 detections (mostly in Portugal) last > 24 h, but **41 % of the detections in Portugal belong to events lasting > 24 h** (25 % > 48 h). 33 % of the nuclei are reappearances (3.2).
+- **Where v2 fails** (validation; context = detections within 2 px in the 72 h before the input window / in its 6 h history):
+
+| Context of the target | Targets | Recall @ 10 km | Recall @ 5 km |
+|---|---|---|---|
+| fresh (nothing in the 78 h before the period) | 227 | 0.95 | 0.71 |
+| pause > 6 h (activity 6–78 h before the period, empty history) | 83 | 0.86 | 0.65 |
+| active in the 6 h history | 79 | 0.68 | 0.41 |
+
+  False alarms at the best-F1 threshold (p ≥ 0.42) by the same context: @ 10 km **31 of 71 (44 %) at "pause > 6 h" places** (fresh 22, active 18); @ 5 km 52 of 155 (fresh 77, active 26).
+- Interpretation: "pause > 6 h" places are 21 % of the targets but 44 % of the false alarms @ 10 km, and their recall is 9 points lower. v2 sees "a fire appears" but cannot know that the place burned one to three days before — exactly what a long-term memory adds. The weakest class, "active in history" (ignitions next to a burning front), already has its context inside the window; memory will not fix it (spatial separation problem, 6.3).
+- Caveat that shapes the design: memory cuts both ways. Earlier activity is evidence for "not new" (reappearance after night, cloud, smoke), but ICNF also records rekindles as new fires (5.3: dropping reappeared nuclei cuts the baseline recall from 0.79 to 0.64 @ 10 km). The memory gives the model the information to separate the two; whether it can depends on knowing *why* the place was quiet (extinguished or hidden by cloud), see the cloud mask below.
+
+**Design space: four questions**
+1. *What* is carried over: hand-made summaries of past detections, the model's own past predictions, a learned latent map, or the full recurrent state (h, c).
+2. *At which clock*: every 15-min step (one long sequence) or once per 12 h period (a slow memory next to the fast per-window model).
+3. *How it is updated*: always (plain recurrence), learned gate, sparse or event-triggered gate, time-based decay.
+4. *How it is trained*: independent samples, samples with a lookback of K previous periods, or continuous streams with truncated backpropagation through time (TBPTT).
+The feedback loop = "always" update with a learned map or state; the long-term gate = gated update at a slow clock. Most of the complexity and cost lies in the training protocol (question 4), not in the gate, which is one extra convolution.
+
+**Option 1 — Hand-made long-history channels (fixed memory).** 6.4 Option B, made concrete.
+- Per pixel, causally from all detections before each step: exponential moving averages of the detection flag and of log(1 + FRP) with τ = 6, 24, 72, 168 h (leaky integrators m_t = e^(−Δt/τ) m_{t−1} + x_t: a recurrence with fixed gates), hours since the last detection (log, capped at 7 d), cumulative FRE of the last 7 d; optionally a 3 × 3 maximum for "burning next door". Either per step or once at the start of the window.
+- Chronology: none in training; computed from the time-sorted detection table (`searchsorted` over [s0 − 7 d, s0), as in `FireData.sample`).
+- Batching unchanged (crops, jitter, flips, hard negatives, shuffling). Cost ≈ v2 (a few more input channels). Flip-equivariant by construction.
+- Strength: the cheapest test of "does older context help at all"; an ablation per τ is directly interpretable; no train/test mismatch. Limit: what is remembered is fixed (no "this front moved north-east for two days"), no learned relevance.
+
+**Option 2 — Feedback of the model's own prediction (feedback loop, output version).**
+- Extra input channel(s): the predicted heatmap of periods k − 1 (and k − 2). Tells the model "I already called an ignition here" → fewer duplicates across period boundaries.
+- Training by self-conditioning (Chen et al., 2022): run the current model on k − 1 without gradient and feed its detached output (zeros half of the time), so that the model is trained on its own imperfect inputs (avoids the exposure bias of training on perfect inputs, cf. scheduled sampling, Bengio et al., 2015). Never the ICNF labels (label leak, 6.4).
+- Chronology: one period of lookback per sample; batches unchanged. Cost ≈ +20 % per lookback period at 15 min (one forward pass without gradient ≈ 1/5 of a training step).
+- Limit: carries only what the head outputs (ignition probability), not "something burned here"; older information only through the chain of outputs. A consistency add-on, not the main memory.
+
+**Option 3 — Always-on latent feedback / stateful ConvLSTM (feedback loop, state version).**
+- 3a: the network outputs an extra M-channel map m_k (tanh) next to the heatmap; m_{k−1} enters period k as extra input channels (or as initial state). An ungated recurrence at the 12 h clock whose transition is the whole network.
+- 3b: stateful ConvLSTM (6.4 Option A): no overlapping windows, one continuous stream per episode with (h, c) carried on; a heatmap is read out every 12 h at the end of each period's tail (period start + 18 h).
+- Chronology: full. Episodes = runs of 12 h periods with detections in Portugal, cut after ≥ 24 h without any detection in the domain; state reset at each episode start. 2004–2019 (persistent pixels still included): 685 episodes, median 3 periods, 90 % ≤ 15 periods (7.5 d), max 105 (52 d); 95 % of the targets lie in episodes of ≥ 10 periods (5 d).
+- Training: B parallel streams (episodes packed one after another, as in language-model batching); every iteration advances each stream by one chunk (1–2 periods = 48–96 steps at 15 min), the state is detached and handed over between iterations (TBPTT; Williams & Peng, 1990), masks reset it at episode boundaries; a loss at every readout inside the chunk, normalised by the positives of the whole batch (most periods have none).
+- Cost: every 15-min slot is processed once (v2's 24 h windows with a 12 h stride process every slot twice), but every active period on the full grid (or fixed tiles): ~2,750–3,000 active training periods × 48 steps × 18,762 px ≈ 2.5–2.7 G pixel-steps per epoch vs. 0.37 G for v2 → **~7× v2 per epoch** (~30 min at 15 min, ~8 min hourly on the M1); roughly 2 GB of activations per stream and 48-step chunk (estimate) → 2–4 streams on the M1, more on Colab. Each epoch sees every target and every negative pixel, so fewer epochs may suffice.
+- Consequences: shuffling only across streams (a batch holds correlated days); no oversampling of positives or hard negatives (focal loss only); flips fixed per stream; tiles need overlap, because fires entering a tile look new at its edge (e.g. 48 × 48 tiles, loss on the inner 32 × 32). The readout lag becomes a free parameter (6 h = early detection, 24–48 h = reconstruction) without changing the input, which unifies the two framings of 6.4. Inference = run each episode from its start, as in training (no warm-up problem).
+- Risks: TBPTT only learns dependencies within a chunk (old information flows forward, but the model is never rewarded for *storing* something longer than a chunk); in 3b one forget gate has to serve both the 15-min dynamics and the multi-day memory, so the effective memory will probably stay short; 3a has no gate, so the memory must be re-encoded every period (vanishing, drift).
+
+**Option 4 — Two timescales with a gated long-term memory (long-term gate). Recommended main design.**
+- *Fast path*: v2 unchanged (24 h window, reset per period); keeps everything that works.
+- *Slow memory* M (C_M channels × H × W), updated once per period by a convolutional GRU (Ballas et al., 2016):
+  z_k = σ(Conv([M_{k−1}, s_k])), r_k = σ(Conv([M_{k−1}, s_k])), M̃_k = tanh(Conv([r_k ⊙ M_{k−1}, s_k])), M_k = (1 − z_k) ⊙ M_{k−1} + z_k ⊙ M̃_k.
+  The update gate z is the long-term gate: z ≈ 0 keeps the old memory (new information discarded), z ≈ 1 overwrites it. With its own slow clock, the fast LSTM gates no longer have to do both jobs.
+- *Writer* s_k (what is offered to the memory, per period): the final hidden state of the fast path, plus hand-made per-period maps (max FRP, number of detections, first and last detection time, FRE), so that the raw facts reach the memory even if the fast state discards them.
+- *Reader* (how period k uses M_{k−1}): (i) at the readout only, head on [h_T, M_{k−1}]; (ii) as extra input channels at every fast step; (iii) as initial fast state h_0 = Conv(M_{k−1}). (ii) is the most expressive: each new hotspot is interpreted in the light of the past.
+- **Key trade-off and its solution:** if the writer depends on the memory (the fast path of k − 1 reads M_{k−2}, …), the K periods must run one after the other with gradients (~K× cost and memory). Separate the two: the writer is memory-free, so the summaries s_k are independent per period (parallel, cacheable); only the reader of the current period reads the memory. Gradients flow through the reader and the K cheap GRU steps. Transformer-XL (Dai et al., 2019) uses the same idea: a cached, gradient-stopped memory of past segments.
+- *Spatial reach*: a 3 × 3 GRU update widens the memory's context by only 1 px per period, slower than multi-day spread (several px per day) → dilated convolutions or a memory at half resolution (stride 2).
+- *Gate variants* (ablation, rising complexity):
+  - G0 no gate (z = 1; = Option 3a): the baseline for the gate.
+  - G1 learned soft gate (ConvGRU as above).
+  - G2 event-triggered: z_k = a_k ⊙ σ(·) with a_k = "detection within r px during period k"; the memory changes only where something happened, elsewhere it is kept or decays with a learned rate γ^Δt (as in GRU-D; Che et al., 2018). No drift in quiet periods; inactive periods can be skipped.
+  - G3 sparse gate: L1 penalty on z, or a binary gate with a straight-through estimator (Skip RNN; Campos et al., 2018).
+  - G4 several memory groups with different fixed rates or clocks (Clockwork RNN, Koutník et al., 2014; Phased LSTM, Neil et al., 2016).
+  The gate maps z_k are a direct explainability output (objective v): where and when the model decided that something was worth remembering.
+- **Training = samples with lookback (the batching proposal).** A sample = (crop, target period k, lookback K): the current 24 h window plus the summaries of the K previous periods at the same crop. Positives and hard negatives exactly as now (one crop per target, as many hard negatives, redrawn every epoch), so class balance, shuffling and the epoch definition stay. **Chronology is needed only inside a sample (K periods back, trivial on the regular 12 h period grid), not across batches.** The memory starts at zero K periods back (or at the episode start if that is closer); K is drawn at random (e.g. 2–14 periods = 1–7 d, sometimes longer) so that the model learns to handle memories of any age. Loss on the current period (or on the last few). Summaries are computed on the full grid and then cropped (no tile-edge effects in the memory).
+- *Flips*: cached learned summaries are not exactly flip-equivariant → cache the four flip variants, flip only the hand-made summaries, or switch off flips for the memory stage.
+- *Inference*: carry M through the season, per period one writer pass + one GRU step + one reader pass (constant cost, as in operational use). Check length generalisation: performance and memory statistics vs. the age of the episode.
+- *Cost* (relative to v2, 4.4 min per epoch at 15 min on the M1):
+  - writer cached (frozen v2 + hand-made maps): one-off full-grid pass over the ~5,300 train + val periods with detections ≈ 20–25 min (0.25 s per period, as in validation); storage at 32 channels fp16 ≈ 1.2 MB per period ≈ 6 GB (memory-mapped; half with 16 channels); training ≈ **1.1–1.2× v2** (K ConvGRU steps on a crop next to 96 ConvLSTM steps);
+  - writer recomputed per sample without gradient: + K inference windows ≈ +K/5 × v2 (K = 6: ~2×, K = 14: ~4×);
+  - end-to-end (gradients through all K writers): ~K× time and activation memory → only as a short fine-tune, with hourly steps or a small K.
+- *Stages*: (1) fast path = v2 (existing checkpoint); (2) freeze the writer, cache the summaries, train memory + reader, with the reader initialised from v2 and the memory branch initialised to zero, so that training starts exactly at v2 and any gain is the memory's; (3) optional joint fine-tune with a short K.
+
+**Option 5 — Memory bank with attention (explicit recall).**
+- Keep the summaries of the last N periods (e.g. 14 = 7 d) per pixel; the current period queries them with per-pixel attention over time (keys/values from s_{k−N}, …, s_{k−1} plus an embedding of their age, query from the current fast state). Comparable to the recall gate of E3D-LSTM (Wang et al., 2019).
+- Pros: direct access to every past period (no vanishing gradients, no drift); quiet periods are simply not attended to; attention weights show which past day mattered. Cons: fixed horizon N, more parameters. Same batching and cache as Option 4.
+- Natural bridge to the planned CNN + Transformer (objective ii): attention over 15-min steps inside the window and over period summaries across days.
+
+**Other information that acts as memory (complements, not alternatives)**
+- *Longer, multi-resolution history*: the last 6 h at 15 min plus the preceding 42–66 h at hourly or 3-hourly steps; +40–100 % steps. Simple, but a fixed horizon and a worse single-readout bottleneck (6.1.1).
+- *Season-scale burn memory*: cumulative FRE or detections per pixel in the last 30 d or since the start of the season (burnt pixels have less fuel left); Option 1 with τ = 30 d.
+- *Satellite climatology*: per-pixel detection frequency of the training years (static prior; training years only).
+- **Cloud mask (SEVIRI CLM, EUMETSAT)**: with a memory, "no detection after a fire" is ambiguous (extinguished or hidden), and the rekindle vs. reappearance question above depends on it. The most important companion input for any memory option; to ask the supervisor.
+- Never: ICNF labels, earlier ICNF ignitions or burned areas of the current season (6.4).
+
+**Comparison**
+
+| Option | Carried over | Clock | Chronology needed in training | Batching vs. v2 | Cost per epoch (× v2) | Main risk |
+|---|---|---|---|---|---|---|
+| 1 hand-made channels | EMAs, time since last detection | per step | none | unchanged | ~1.0 | fixed, not learned |
+| 2 own prediction | heatmap of k − 1 | 12 h | 1-period lookback per sample | unchanged | ~1.2 | weak memory |
+| 3a latent loop (no gate) | learned map | 12 h | lookback or streams | unchanged or streams | 1.2–7 | drift, vanishing |
+| 3b stateful ConvLSTM | (h, c) | 15 min | full: episodes, ordered streams, TBPTT, resets | parallel streams, full grid / fixed tiles, no oversampling | ~7 (hourly ~2) | one gate for two timescales; horizon = chunk |
+| **4 two timescales + gate** | slow map M | 12 h | K-period lookback per sample | unchanged (+ cached summaries) | **1.1–1.2** cached, 2–4 recomputed | frozen writer; length generalisation |
+| 5 memory bank + attention | last N summaries | 12 h | N-period lookback per sample | unchanged (+ cache) | ~1.2 | fixed horizon N |
+
+**Recommendation and order of experiments**
+0. The diagnostic above as a script; repeat it for every memory model (recall and false alarms by context class).
+1. Option 1 (τ = 6/24/72/168 h + time since the last detection) on v2: the cheapest test. If the "pause > 6 h" class does not improve, check the cloud mask before building a learned memory.
+2. Option 4 with a frozen v2 writer + hand-made maps: gate G0 vs. G1 vs. G2, reader (i) vs. (ii), K random 2–14. The main contribution; it must beat Option 1 to show that a learned memory adds more than fixed features.
+3. Option 5 if Option 4 helps (lead-in to the Transformer).
+4. Option 3b only as a reference for continuous operation, if time allows (most expensive, least flexible training).
+Option 2 as a small add-on to the chosen model. Several seeds per configuration (AP @ 5 km fluctuates, 6.5); same split.
+
+**Evaluation additions**
+- Recall, AP and false alarms by context class (fresh / pause > 6 h / active in history); the expected gain is in "pause > 6 h", above all fewer false alarms.
+- Performance vs. day of the episode (memory should help more later in an episode).
+- Rekindle subset: targets with activity within 2 px 6–48 h before.
+- Gate and attention maps for a validation case (2016-08-07/08; 2017-10-15 is in the locked test split).
+- Implementation check for stateful and memory models: identical outputs whether an episode is processed in one go or in chunks.
+
+**Pitfalls**
+- Leakage: memory only from satellite data before the readout. The summary of period k includes its 6 h tail (= the first 6 h of k + 1): fine for k + 1, never for k. Cached learned summaries must come from a writer trained on the training years only (v2 is).
+- Split boundaries: episodes do not cross years (1 January is off-season); the memory for validation and test starts empty, as in deployment.
+- Persistent off-season pixels keep episodes alive and fill the memory → exclude them when cutting episodes; give the memory the persistent flag.
+- Inactive periods (about half of all periods have no detection in Portugal in their window): skip them (with decay γ^Δt in G2) instead of running empty windows.
+- A fire ignited in the tail of k − 1 is in the memory at k: no label change needed (it belongs to k − 1), but the model must not predict it again in k (Option 2 helps).

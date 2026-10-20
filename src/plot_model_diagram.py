@@ -8,7 +8,10 @@ stacked 3x3 convolutions within one time step, (c) growth over time through the 
 
 Run from the repository root:
   .venv/bin/python src/plot_model_diagram.py
-Outputs: figures/model/convlstm_v1_diagram.png / .pdf, figures/model/convlstm_cell_detail.png / .pdf
+Third figure (concept, not implemented): two timescales with a gated long-term memory (notes.md 6.6).
+
+Outputs: figures/model/convlstm_v1_diagram.png / .pdf, figures/model/convlstm_cell_detail.png / .pdf,
+         figures/model/convlstm_memory_concept.png / .pdf
 """
 import matplotlib
 matplotlib.use("Agg")
@@ -126,6 +129,112 @@ def detail_figure(p_l1, p_l2):
     print("figures: figures/model/convlstm_cell_detail.png / .pdf")
 
 
+def memory_figure(p_head):
+    """Concept of notes.md 6.6, Option 4: v2 fast path + slow gated memory (ConvGRU, once per period)."""
+    LIGHT_AQUA = "#d1efe3"
+    fig, ax = plt.subplots(figsize=(16, 11.5))
+    ax.set_xlim(0, 16); ax.set_ylim(0, 11.5); ax.axis("off")
+    text(ax, 0.2, 11.3, "Concept: two timescales with a gated long-term memory (notes.md 6.6, Option 4; not implemented)",
+         13, weight="bold", ha="left", va="top")
+
+    # ---------------- (a) unrolled over periods
+    text(ax, 0.2, 10.65, "(a) Unrolled over consecutive 12 h periods: one training sample = current period k + lookback of K periods",
+         10, weight="bold", ha="left")
+    ym = 5.95                                            # memory row
+    cols = [(0.9, "k − 3"), (3.5, "k − 2"), (6.1, "k − 1")]
+    for x, lab in cols:
+        ax.add_patch(Rectangle((x - 0.25, ym - 0.35), 2.35, 4.5, facecolor="#f6f5f2", edgecolor="none", zorder=0))
+        text(ax, x + 0.9, 9.95, f"period {lab}", 9, color=E.INK2)
+        for j in range(4):                               # input window stack
+            ax.add_patch(Rectangle((x + 0.45 + 0.08 * j, 8.75 + 0.08 * j), 0.75, 0.75, facecolor=LIGHT_BLUE,
+                                   edgecolor=E.BLUE, lw=0.7))
+        text(ax, x + 1.35, 9.25, "24 h\nwindow", 7.5, color=E.INK2, ha="left")
+        box(ax, x, 7.35, 1.85, 1.05, "Writer (memory-free)\nv2 fast path, frozen\n+ hand-made maps", GREY, size=7.5)
+        arrow(ax, x + 0.9, 8.75, x + 0.9, 8.4)
+        text(ax, x + 1.0, 6.95, "sₖ₋" + "₀₁₂₃"[int(lab[-1])], 8.5, color=E.INK2, ha="left")
+        box(ax, x + 0.35, ym - 0.3, 1.15, 0.6, "gate\n(ConvGRU)", LIGHT_AQUA, edge=E.AQUA, size=7.5)
+        arrow(ax, x + 0.9, 7.35, x + 0.9, ym + 0.3)
+    # memory chain M_{k-K} -> ... -> M_{k-1}
+    text(ax, 0.15, ym + 0.65, "M = 0\n(K periods back\nor episode start)", 7, color=E.INK2, ha="left", va="bottom")
+    arrow(ax, 0.2, ym, 1.25, ym, color=E.AQUA, lw=1.6)
+    for (x, _), (xn, _) in zip(cols[:-1], cols[1:]):
+        arrow(ax, x + 1.5, ym, xn + 0.35, ym, color=E.AQUA, lw=1.6)
+    for (x, lab) in cols:
+        nxt = {"k − 3": "Mₖ₋₃", "k − 2": "Mₖ₋₂", "k − 1": "Mₖ₋₁"}[lab]
+        text(ax, x + 2.05, ym + 0.22, nxt, 8.5, color=E.AQUA)
+    ax.add_patch(Rectangle((0.6, 7.2), 7.6, 1.35, fill=False, edgecolor=E.MUTED, lw=0.8, ls="--"))
+
+    # current period k: reader
+    xk = 8.75
+    ax.add_patch(Rectangle((xk - 0.25, ym - 0.35), 4.75, 4.5, facecolor=LIGHT_ORANGE, edgecolor="none", zorder=0))
+    text(ax, xk + 2.1, 9.95, "current period k (prediction)", 9, color=E.INK2)
+    for j in range(4):
+        ax.add_patch(Rectangle((xk + 0.1 + 0.08 * j, 8.75 + 0.08 * j), 0.75, 0.75, facecolor=LIGHT_BLUE, edgecolor=E.BLUE, lw=0.7))
+    text(ax, xk + 1.0, 9.25, "24 h window\n(as v2)", 7.5, color=E.INK2, ha="left")
+    box(ax, xk, 7.1, 2.6, 1.4, "Reader = v2 fast path\nencoder → ConvLSTM 1 → 2\n(96 × 15 min, reset per period)\n"
+        "reads Mₖ₋₁ at every step\n(extra input channels)", LIGHT_BLUE, size=7.5)
+    arrow(ax, xk + 0.55, 8.75, xk + 0.55, 8.5)
+    arrow(ax, cols[-1][0] + 1.5, ym, xk + 1.3, 7.1, color=E.AQUA, lw=1.6, rad=0.25)
+    text(ax, xk + 0.35, 6.45, "Mₖ₋₁", 8.5, color=E.AQUA)
+    box(ax, xk + 3.0, 7.1, 1.3, 1.4, f"Head\non [h_T, Mₖ₋₁]\n\n≈{p_head:,}\nparams (v2)", LIGHT_ORANGE, size=7.5)
+    arrow(ax, xk + 2.6, 7.8, xk + 3.0, 7.8)
+    # heatmap
+    r, c = np.mgrid[0:40, 0:30]
+    hm = np.zeros((40, 30))
+    for (ci, cj) in [(12, 9), (25, 20), (31, 7)]:
+        hm = np.maximum(hm, np.exp(-((r - ci) ** 2 + (c - cj) ** 2) / 8))
+    ax.imshow(hm, extent=(14.0, 15.6, 6.95, 8.95), cmap=E.SEQ_ORANGE, vmin=0, vmax=1, zorder=2)
+    ax.add_patch(Rectangle((14.0, 6.95), 1.6, 2.0, fill=False, edgecolor=E.INK2, lw=1, zorder=3))
+    arrow(ax, xk + 4.3, 7.8, 14.0, 7.8)
+    text(ax, 14.8, 6.6, "ignition heatmap\nof period k", 8.5)
+    # memory update with period k for the next period (inference)
+    box(ax, xk + 3.0, ym - 0.3, 1.3, 0.6, "gate\n(ConvGRU)", LIGHT_AQUA, edge=E.AQUA, size=7.5)
+    box(ax, xk + 3.0, 6.4, 1.3, 0.5, "writer (k)", GREY, size=7.5)
+    arrow(ax, xk + 3.65, 6.4, xk + 3.65, ym + 0.3)
+    text(ax, xk + 4.4, 6.65, "sₖ", 8.5, color=E.INK2, ha="left")
+    arrow(ax, xk + 4.3, ym, 15.4, ym, color=E.AQUA, lw=1.6)
+    text(ax, 15.45, ym, "Mₖ →\nperiod k + 1\n(inference)", 7.5, color=E.AQUA, ha="left")
+    # gradient bracket and lookback bracket
+    ax.plot([0.9, 12.2], [5.2, 5.2], color=E.ORANGE, lw=1.2)
+    text(ax, 6.5, 4.95, "gradients: reader, head and the K cheap gate steps (writer frozen; memory branch initialised to zero → starts exactly at v2)",
+         8, color=E.ORANGE)
+    text(ax, 6.5, 4.65, "writer summaries s: computed once on the full grid and cached (no gradient), then cropped and flipped with the sample",
+         8, color=E.INK2)
+    ax.annotate("", xy=(0.65, 10.25), xytext=(8.25, 10.25),
+                arrowprops=dict(arrowstyle="<->", color=E.INK2, lw=0.9))
+    text(ax, 4.45, 10.42, "lookback K = 2–14 periods (1–7 d), random", 8, color=E.INK2)
+
+    # ---------------- (b) the long-term gate
+    text(ax, 0.2, 4.4, "(b) The long-term gate: one ConvGRU step per period (Ballas et al., 2016)", 10, weight="bold", ha="left")
+    box(ax, 0.3, 3.05, 1.7, 0.75, "memory Mₖ₋₁\n(C_M ch × H × W)", LIGHT_AQUA, edge=E.AQUA, size=8)
+    box(ax, 0.3, 1.95, 1.7, 0.75, "summary sₖ\n(period k)", GREY, size=8)
+    box(ax, 2.6, 2.2, 1.2, 1.35, "concat", "white", size=8.5)
+    arrow(ax, 2.0, 3.4, 2.6, 3.1); arrow(ax, 2.0, 2.3, 2.6, 2.6)
+    gates = [("z: update gate  σ(Conv 3×3)\n'is this worth remembering?'", 3.55),
+             ("r: reset gate  σ(Conv 3×3)", 2.55),
+             ("M̃: candidate\ntanh(Conv 3×3 [r ⊙ Mₖ₋₁, sₖ])", 1.5)]
+    for name, y in gates:
+        box(ax, 4.5, y - 0.35, 3.0, 0.7, name, "white", size=7.5)
+        arrow(ax, 3.8, 2.85, 4.5, y, lw=0.9)
+    arrow(ax, 6.0, 2.2, 6.0, 1.85, lw=0.9)
+    box(ax, 8.3, 2.25, 3.4, 1.15, "Mₖ = (1 − z) ⊙ Mₖ₋₁ + z ⊙ M̃\nz ≈ 0: keep (new info discarded)\nz ≈ 1: overwrite", LIGHT_AQUA,
+        edge=E.AQUA, size=8)
+    arrow(ax, 7.5, 3.55, 8.3, 3.1, lw=0.9); arrow(ax, 7.5, 1.5, 8.3, 2.5, lw=0.9)
+    box(ax, 12.2, 2.25, 1.6, 1.15, "Mₖ\n→ next period", LIGHT_AQUA, edge=E.AQUA, size=8)
+    arrow(ax, 11.7, 2.82, 12.2, 2.82, color=E.AQUA, lw=1.4)
+    text(ax, 8.3, 1.75, "⊙ = per pixel; the gate decides separately for every pixel and channel", 7.5, color=E.INK2, ha="left")
+    text(ax, 8.3, 1.2, "Variants (ablation): G0 no gate (z = 1) · G1 learned (above) · G2 event-triggered z = aₖ ⊙ z "
+         "(aₖ = detections nearby),\nelse keep / decay γ^Δt · G3 sparse (L1 on z) · G4 several fixed rates. "
+         "Dilated / stride-2 convs widen the memory's reach.", 7.5, color=E.INK2, ha="left", va="top")
+    text(ax, 0.3, 0.75, "Gate maps z are an explainability output: where and when the model wrote to its long-term memory.",
+         8, color=E.INK2, ha="left")
+
+    fig.savefig(FIG / "convlstm_memory_concept.png", dpi=200, bbox_inches="tight")
+    fig.savefig(FIG / "convlstm_memory_concept.pdf", bbox_inches="tight")
+    plt.close(fig)
+    print("figures: figures/model/convlstm_memory_concept.png / .pdf")
+
+
 def main():
     FIG.mkdir(parents=True, exist_ok=True)
     m = IgnitionConvLSTM(in_ch=7)
@@ -214,6 +323,7 @@ def main():
     print(f"parameters: encoder {p_enc:,}, ConvLSTM 1 {p_l1:,}, ConvLSTM 2 {p_l2:,}, head {p_head:,}, total {total:,}")
     print("figures: figures/model/convlstm_v1_diagram.png / .pdf")
     detail_figure(p_l1, p_l2)
+    memory_figure(p_head)
 
 
 if __name__ == "__main__":
