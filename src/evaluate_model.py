@@ -17,8 +17,7 @@ import eda_figures as E
 from baselines import predictions as baseline_predictions
 from dataset import FireData
 from evaluate import evaluate
-from model import IgnitionConvLSTM
-from train import MODELS, get_device, predict
+from train import get_device, load_model, predict
 
 FIG = E.ROOT / "figures" / "model"
 SPLIT = "val"
@@ -30,16 +29,13 @@ def main():
     args = ap.parse_args()
     FIG.mkdir(parents=True, exist_ok=True)
     device = get_device()
-    # own checkpoint written by src/train.py (v1 stored numpy scalars in its metrics)
-    ck = torch.load(MODELS / f"{args.name}.pt", map_location=device, weights_only=False)
-    model = IgnitionConvLSTM(in_ch=7).to(device)
-    model.load_state_dict(ck["state_dict"])
+    model, cfg, ck = load_model(args.name, device)
     print(f"checkpoint {args.name}: epoch {ck['epoch']}, config {ck['config']}")
 
     data = FireData()
     periods = data.periods.loc[(data.periods["split"] == SPLIT) & (data.periods["n_det"] > 0), "period"]
     preds = {"baseline: nucleus birth": baseline_predictions(data)["birth"],
-             f"ConvLSTM ({args.name})": predict(model, data, periods, ck["config"]["step_agg"], device)}
+             f"ConvLSTM ({args.name})": predict(model, data, periods, cfg, device)}
 
     rows, curves = [], {}
     for name, p in preds.items():

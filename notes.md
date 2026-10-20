@@ -42,6 +42,7 @@ Run from the repository root, in this order:
 14. `.venv/bin/python src/plot_model_diagram.py`: architecture diagram (6.1) and ConvLSTM detail diagram (6.1.2), concept diagram of the long-term memory (6.6)
 15. `.venv/bin/python src/plot_predictions.py --name convlstm_v1 > outputs/convlstm_v1_predictions_log.txt`: predicted vs. ICNF ignition maps (6.3)
 16. `.venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt`, then `src/evaluate_model.py --name convlstm_v2_15min` and `src/plot_predictions.py --name convlstm_v2_15min`: 15-min model (6.5)
+17. `python src/run_ablations.py --tier 1 --seeds 0 1 2` (or `colab/ablations_colab.ipynb` on a Colab GPU), then `python src/summarize_ablations.py`: ablation study (6.7); `python src/peak_ablation.py --name convlstm_v1`: peak-extraction ablation
 
 ## 1. Data
 
@@ -803,3 +804,47 @@ Option 2 as a small add-on to the chosen model. Several seeds per configuration 
 - Persistent off-season pixels keep episodes alive and fill the memory → exclude them when cutting episodes; give the memory the persistent flag.
 - Inactive periods (about half of all periods have no detection in Portugal in their window): skip them (with decay γ^Δt in G2) instead of running empty windows.
 - A fire ignited in the tail of k − 1 is in the memory at k: no label change needed (it belongs to k − 1), but the model must not predict it again in k (Option 2 helps).
+
+### 6.7 Ablation study: plan and tooling (2026-10-20)
+
+**Protocol.** Every experiment changes *one* setting of the reference `ref` (= v1: hourly steps, 7 channels, 2 × 32 ConvLSTM, last-state readout, focal loss, σ = 1 px, ignore radius 2 px, targets ≥ 50 ha, 32 × 32 crops, 1 hard negative per positive, flips, 20 epochs, AdamW 1e-3). ≥ 3 seeds per experiment (AP @ 5 km varies by ±0.03–0.05 between epochs alone, single runs cannot separate small effects); reported as mean ± std of (a) the best validation epoch (= saved checkpoint) and (b) the mean of the last five validation evaluations; plus recall for isolated / non-isolated fires, median error, F1. Validation 2015–2016 only; the test split stays locked until the final configuration is chosen. Once 15-min steps are confirmed (`ref15`), later ablations can switch their reference to v2.
+
+**Experiments** (`src/run_ablations.py`, names → `train.py` options):
+
+| Tier | Name | Change | Question |
+|---|---|---|---|
+| 1 | `ref` | — | reference (v1) |
+| 1 | `ref15` | `--step-agg 1` | is the 15-min gain real (6.5)? |
+| 1 | `births_plus` | + `births` channel | does the hand-made clustering (nucleus births, 3.2) add information to the raw input? |
+| 1 | `births_only` | `births` instead of FRP/confidence/detected | how good is the clustering alone, with a learned model on top? (core argument of 4.0) |
+| 1 | `no_time` / `no_static` / `no_conf` / `no_frp` / `presence_only` | drop period+time / mainland+persistent / confidence / FRP / FRP+confidence | which inputs matter; is FRP intensity informative or only presence? |
+| 1 | `hist0` / `tail0` | `--history-h 0` / `--tail-h 0` | do the 6 h before / after the period help? |
+| 2 | `layers1` / `layers3` | 1 / 3 ConvLSTM layers | is the second layer justified (6.1.2)? |
+| 2 | `hidden16` / `hidden64` | 16 / 64 channels | capacity vs. overfitting (~1,900 targets) |
+| 2 | `kernel5` | 5 × 5 kernels | more context per step vs. depth |
+| 2 | `readout_max` / `readout_mean` | head on max / mean of the top hidden state over all steps | is the single final readout a bottleneck? |
+| 2 | `cnn3d` | 3D CNN, no recurrence | is the recurrent memory needed at all? |
+| 2 | `crop16` / `crop64` | training crop size | how much spatial context is needed? |
+| 3 | `sigma05` / `sigma2` | target σ 0.5 / 2 px | sharper peaks → fewer merged ignitions (6.3)? |
+| 3 | `loss_bce` / `loss_mse` | weighted BCE / MSE | is the CenterNet focal loss the right choice? |
+| 3 | `neg0` / `neg05` / `neg2` | 0 / 0.5 / 2 hard negatives per positive | do "fire but no ignition" crops reduce false alarms? |
+| 3 | `ignore0` / `ignore4` | ignore radius 0 / 4 px (training) | effect of the ignore regions |
+| 3 | `target100` | targets ≥ 100 ha only (smaller → ignore) | fewer, clearer labels vs. more, weaker ones |
+| 3 | `noflip` | no flips | does the augmentation help? |
+| — | `src/peak_ablation.py` | peak window 3/5, threshold 0.02/0.05/0.1, sub-pixel on/off | post-processing only, no retraining |
+
+Not ablations but extensions (later, 6.4/6.6): long-history summary channels, longer windows, stateful/long-term memory model, covariates, cloud mask, CNN + Transformer.
+
+**Code changes for the ablations.**
+- `src/model.py`: `build_model(cfg)`; `IgnitionConvLSTM` with configurable layers/width/kernel and readout (`last` = v1/v2, `max`, `mean`); new non-recurrent `TemporalCNN3D` (3 × Conv3d, time pooled by max and mean); losses `focal` (v1), `bce`, `mse`.
+- `src/dataset.py`: `sample(..., sigma, ignore_r, min_target_ha, births)`; per-detection nucleus-birth flag for the `births` channel (first time step of each nucleus, 3.2). Defaults reproduce the v1/v2 samples.
+- `src/train.py`: all settings as options (`--channels`, `--history-h`, `--tail-h`, `--arch`, `--layers`, `--hidden`, `--kernel`, `--readout`, `--crop`, `--sigma`, `--ignore-r`, `--min-target-ha`, `--loss`, `--neg-ratio`, `--no-flip`, `--workers`); `DEFAULTS` = v1; `config_from()` fills missing keys of older checkpoints, so v1/v2 load unchanged (re-evaluation of v1 through the new code reproduces AP 0.302 / 0.664 exactly). Positive-pixel threshold of the loss scales with σ (`pos_threshold`, = 0.75 for σ ≥ 1 px as in v1/v2). Run names may contain a folder (`ablations/ref_s0`). History written after every epoch; `<run>_done.json` marks a finished run. DataLoader workers get their own random streams. Validation records also recall for isolated / non-isolated fires.
+- `src/evaluate_model.py`, `src/plot_predictions.py`: use `load_model()` and the stored configuration.
+- `src/run_ablations.py`: experiment list (above), runs experiment × seed via `train.py` into `models/ablations/`, `outputs/ablations/`; skips finished runs (resumable); `--smoke` (1 epoch, 3 batches, 10 validation periods) and `--dry-run`.
+- `src/summarize_ablations.py`: mean ± std per experiment, Δ vs. `ref` → `outputs/ablations/summary.{csv,md}`, `figures/ablations/summary.png`.
+- `src/peak_ablation.py`: post-processing grid on one checkpoint.
+- `colab/ablations_colab.ipynb`: same setup as `colab/train_colab.ipynb` (clone from GitHub, `models/` and `outputs/` on Drive), then dry run → smoke test → runs → summary → peak ablation. Resumable after a disconnect.
+
+**Cost.** Locally (M1) an hourly run ≈ 35 min, `ref15` ≈ 2 h. Tier 1 with 3 seeds = 33 runs (~23 h locally incl. `ref15`); Tiers 1–3 = 96 runs. On Colab the time per run is to be measured with the smoke test; a free session lasts several hours at most, so the runs will span several sessions (the runner resumes).
+
+**Suggested order.** (1) `ref`, `ref15` (+ the peak ablation, no training); (2) rest of Tier 1 (`births_*`, channels, history/tail); (3) Tier 2 (`layers*`, `readout_*`, `cnn3d` first); (4) Tier 3 (`sigma*`, `neg*`, `target100` first); then fix the configuration, extensions, retrain on 2004–2016, single test evaluation.

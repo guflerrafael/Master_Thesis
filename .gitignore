@@ -8,3 +8,8 @@ __pycache__/
 
 # Reference papers (not versioned)
 documents/
+
+# Ablation smoke tests (src/run_ablations.py --smoke)
+models/ablations_smoke/
+outputs/ablations_smoke/
+figures/ablations_smoke/

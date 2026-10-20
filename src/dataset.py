@@ -42,12 +42,19 @@ class FireData:
         self._frp = (np.log1p(self.det["frp_mw"].values) / FRP_NORM).astype(np.float32)
         self._conf = (self.det["confidence"].values / 100).astype(np.float32)
         self._lab = {p: g for p, g in self.labels.groupby("period")}
+        # first time step of each SEVIRI nucleus (3.2): optional 'births' input channel, i.e. the
+        # hand-made clustering offered to the model (ablation clustered vs. raw input)
+        t = self.det["time_utc"]
+        self._birth = (t == t.groupby(self.det["nucleus_id"]).transform("min")).values
+        self._area = self.fires.set_index("fire_id")["burned_area_ha"]
 
     @staticmethod
     def first_slot(period):
         return (pd.Timestamp(period) - pd.Timedelta(hours=HISTORY_H)).value // (15 * 60 * 10**9)
 
-    def sample(self, period, crop=None):
+    def sample(self, period, crop=None, sigma=SIGMA, ignore_r=IGNORE_R, min_target_ha=None, births=False):
+        """Defaults reproduce the v1/v2 samples. births=True appends a 4th input channel (nucleus
+        birth flag); min_target_ha turns smaller targets into ignore regions."""
         i0, j0, h, w = (0, 0, G.H, G.W) if crop is None else (crop[0], crop[1], crop[2], crop[2])
         s0 = self.first_slot(period)
         a, b = np.searchsorted(self._slot, [s0, s0 + T])
@@ -55,24 +62,29 @@ class FireData:
         keep = (ii >= 0) & (ii < h) & (jj >= 0) & (jj < w)
         t = self._slot[a:b][keep] - s0
         ii, jj = ii[keep], jj[keep]
-        x = np.zeros((T, len(CHANNELS), h, w), np.float32)
+        x = np.zeros((T, len(CHANNELS) + int(births), h, w), np.float32)
         x[t, 0, ii, jj] = self._frp[a:b][keep]
         x[t, 1, ii, jj] = self._conf[a:b][keep]
         x[t, 2, ii, jj] = 1.0
+        if births:
+            x[t, 3, ii, jj] = self._birth[a:b][keep]
 
         y = np.zeros((h, w), np.float32)
         wt = self.static["pt_loss"][i0:i0 + h, j0:j0 + w].astype(np.float32)
         lab = self._lab.get(pd.Timestamp(period), self.labels.iloc[:0]).copy()
         lab["i_loc"], lab["j_loc"] = lab["i_f"] - i0, lab["j_f"] - j0
+        if min_target_ha:
+            small = (lab["role"] == "target") & (lab["fire_id"].map(self._area) < min_target_ha)
+            lab.loc[small, "role"] = "ignore"
         r, c = np.mgrid[0:h, 0:w]
         core = np.zeros((h, w), bool)
         for q in lab.itertuples():
             d2 = (r - q.i_loc) ** 2 + (c - q.j_loc) ** 2
             if q.role == "target":
-                y = np.maximum(y, np.exp(-d2 / (2 * SIGMA ** 2)).astype(np.float32))
+                y = np.maximum(y, np.exp(-d2 / (2 * sigma ** 2)).astype(np.float32))
                 core |= d2 <= TARGET_CORE ** 2
             else:
-                wt[d2 <= IGNORE_R ** 2] = 0.0
+                wt[d2 <= ignore_r ** 2] = 0.0
         wt[core] = self.static["pt_loss"][i0:i0 + h, j0:j0 + w][core]
         inside = lab["i_loc"].between(-0.5, h - 0.5) & lab["j_loc"].between(-0.5, w - 0.5)
         return x, y, wt, lab[inside]

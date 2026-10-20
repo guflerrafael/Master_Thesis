@@ -23,8 +23,7 @@ import eda_figures as E
 import grid as G
 from dataset import FRP_NORM, FireData
 from evaluate import evaluate
-from model import IgnitionConvLSTM
-from train import MODELS, features, get_device, heatmap_to_points, predict, static_crop
+from train import features, get_device, heatmap_to_points, load_model, predict, sample_kwargs, static_crop
 
 FIG = E.ROOT / "figures" / "model"
 PROB_VMAX = 0.6   # colour scale of the probability panels (model output stays below ~0.6)
@@ -45,15 +44,13 @@ def main():
     ap.add_argument("--name", default="convlstm_v1")
     args = ap.parse_args()
     device = get_device()
-    ck = torch.load(MODELS / f"{args.name}.pt", map_location=device, weights_only=False)   # own checkpoint
-    model = IgnitionConvLSTM(in_ch=7).to(device)
-    model.load_state_dict(ck["state_dict"]); model.eval()
-    step_agg = ck["config"]["step_agg"]
+    model, cfg, ck = load_model(args.name, device)
+    model.eval()
     data = FireData()
 
     # operating threshold: best F1 at 10 km on the whole validation split
     val_periods = data.periods.loc[(data.periods["split"] == "val") & (data.periods["n_det"] > 0), "period"]
-    _, curve, _ = evaluate(predict(model, data, val_periods, step_agg, device), data, "val", 10)
+    _, curve, _ = evaluate(predict(model, data, val_periods, cfg, device), data, "val", 10)
     f1 = 2 * curve["precision"] * curve["recall"] / (curve["precision"] + curve["recall"]).clip(lower=1e-9)
     thr = float(curve["score"].iloc[int(f1.values.argmax())])
     print(f"best-F1 threshold (val, 10 km): p ≥ {thr:.3f}")
@@ -69,9 +66,9 @@ def main():
     zoom = {}
     fig, axes = plt.subplots(len(chosen), 3, figsize=(11, 4.6 * len(chosen)), layout="constrained")
     for r, (label, period) in enumerate(chosen):
-        x, y, w, lab = data.sample(period)
+        x, y, w, lab = data.sample(period, **sample_kwargs(cfg))
         with torch.no_grad():
-            prob = torch.sigmoid(model(torch.from_numpy(features(x, st, step_agg))[None].to(device)))[0].cpu().numpy()
+            prob = torch.sigmoid(model(torch.from_numpy(features(x, st, cfg))[None].to(device)))[0].cpu().numpy()
         fi, fj, s = heatmap_to_points(prob)
         keep = s >= thr
         tg, ig = lab[lab["role"] == "target"], lab[lab["role"] == "ignore"]
