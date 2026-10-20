@@ -186,15 +186,22 @@ def heatmap_to_points(prob, thr=0.05, topk=50, window=3, subpixel=True):
 
 
 @torch.no_grad()
-def predict_maps(model, data, periods, cfg, device):
-    """Full-domain probability map of every period: {period: (H, W) array}."""
+def predict_maps(model, data, periods, cfg, device, batch=16, amp=False):
+    """Full-domain probability map of every period: {period: (H, W) array}. Periods are run
+    through the model `batch` at a time: with one period per call the GPU mostly waits on the
+    many small ConvLSTM steps (validation was ~90 % model time at batch 1). amp=True: half
+    precision on CUDA (faster on e.g. T4; scores not bit-identical, differences tiny)."""
     model.eval()
     st = static_crop(data)
+    periods = list(periods)
     out = {}
-    for p in periods:
-        x, _, _, _ = data.sample(p, **sample_kwargs(cfg))
-        f = torch.from_numpy(features(x, st, cfg))[None].to(device)
-        out[p] = torch.sigmoid(model(f))[0].cpu().numpy()
+    for k in range(0, len(periods), batch):
+        chunk = periods[k:k + batch]
+        f = np.stack([features(data.sample(p, **sample_kwargs(cfg))[0], st, cfg) for p in chunk])
+        with torch.autocast("cuda", dtype=torch.float16, enabled=amp and device.type == "cuda"):
+            logits = model(torch.from_numpy(f).to(device))
+        prob = torch.sigmoid(logits.float()).cpu().numpy()
+        out.update(zip(chunk, prob))
     return out
 
 
@@ -207,8 +214,8 @@ def maps_to_points(maps, **peak):
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["period", "lat", "lon", "score"])
 
 
-def predict(model, data, periods, cfg, device, **peak):
-    return maps_to_points(predict_maps(model, data, periods, cfg, device), **peak)
+def predict(model, data, periods, cfg, device, batch=16, amp=False, **peak):
+    return maps_to_points(predict_maps(model, data, periods, cfg, device, batch, amp), **peak)
 
 
 def load_model(name, device):
@@ -234,6 +241,8 @@ def parse_args(argv=None):
     ap.add_argument("--val-periods", type=int, default=0, help="limit validation periods (smoke test)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=0, help="DataLoader worker processes (Colab: 2)")
+    ap.add_argument("--val-batch", type=int, default=16, help="validation periods per model call")
+    ap.add_argument("--val-amp", action="store_true", help="half-precision validation on CUDA (faster, not bit-identical)")
     # input
     ap.add_argument("--step-agg", type=int, default=DEFAULTS["step_agg"], help="15-min slots per model step (4 = hourly)")
     ap.add_argument("--channels", default=",".join(DEFAULT_CHANNELS), help=f"comma list from {','.join(ALL_CHANNELS)}")
@@ -302,7 +311,7 @@ def main():
         rec = {"epoch": epoch, "train_loss": float(np.mean(losses)), "train_min": (time.time() - t0) / 60}
         if epoch % args.val_every == 0 or epoch == args.epochs:
             t1 = time.time()
-            preds = predict(model, data, val_periods, cfg, device)
+            preds = predict(model, data, val_periods, cfg, device, batch=args.val_batch, amp=args.val_amp)
             for k in (5, 10):
                 res, _, _ = evaluate(preds, data, "val", k)
                 rec.update({f"AP@{k}": res["AP"], f"recall@{k}": res["recall (all preds)"], f"F1@{k}": res["best F1"],
