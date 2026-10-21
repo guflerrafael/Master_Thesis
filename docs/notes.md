@@ -21,6 +21,7 @@ figures/baselines/ precision-recall curves of the baselines        (src/baseline
 figures/model/    model vs. baseline precision-recall curves      (src/evaluate_model.py)
 models/           trained checkpoints (*.pt)                      (src/train.py)
 src/               all code
+docs/              thesis.md (context), notes.md (this file), literature.md (literature review)
 ```
 
 Environment: Python 3.11, `python -m venv .venv && .venv/bin/pip install -r requirements.txt` (only packages imported by `src/`, pinned).
@@ -849,4 +850,56 @@ Not ablations but extensions (later, 6.4/6.6): long-history summary channels, lo
 
 **Validation speed (2026-10-20).** Profile of one validation of v1 on the M1 (844 periods): sample building 3 s, features 4 s, **model 52 s**, peaks 0.5 s, scoring 0.5 s. One full-domain period (177 × 106 px) costs about as much compute as one training batch (16 × 32 × 32 px), so a validation is comparable to an epoch of training (Colab T4: 0.49 min training vs. 1.35 min validation per epoch). Changes: `predict_maps()` runs `--val-batch` periods per model call (default 16; identical scores — v1 0.3023 / 0.6644, v2 0.3482 / 0.6722 at batch 1 and 16; M1 speed-up only 1.3×: 58 → 45 s, 222 → 171 s); optional `--val-amp` = half-precision validation on CUDA (expected 2–3× on a T4, scores not bit-identical, untested on CUDA at the time of writing). If still too slow, `--val-every 4`. Whatever is chosen must be used for **all** ablation runs.
 
+**Ablation run settings (fixed 2026-10-20).** All ablation runs on Colab use `EXTRA = "--workers 2 --val-amp"` (2 data-loading workers, half-precision validation on the GPU), validation every 2 epochs, `--val-batch 16`. Measured on the Colab T4 for `ref_s0`: 0.48 min training per epoch, 0.73 min per validation (1.35 min before batching/AMP) → ≈ 17 min per hourly run, `ref15` ≈ 60 min (estimate). Epoch-2 scores of `ref_s0` (AP@5 0.182, AP@10 0.524, recall@10 0.82, median error 3.4 / 4.7 km) are in the range of v1 at epoch 2 (0.164 / 0.531), so half-precision validation does not visibly distort the scores. Consequence: ablation results are compared with each other and with `ref` from the same batch, not directly with the v1/v2 numbers (full-precision validation). Estimated cost with 3 seeds: Tier 1 ≈ 11–12 h, Tiers 1–3 ≈ 28–30 h.
+
 **Suggested order.** (1) `ref`, `ref15` (+ the peak ablation, no training); (2) rest of Tier 1 (`births_*`, channels, history/tail); (3) Tier 2 (`layers*`, `readout_*`, `cnn3d` first); (4) Tier 3 (`sigma*`, `neg*`, `target100` first); then fix the configuration, extensions, retrain on 2004–2016, single test evaluation.
+
+### 6.8 Ablation results, session A1 (2026-10-20)
+
+Colab T4, `EXTRA = "--workers 2 --val-amp"`, seeds 0–2, validation 2015–2016; summary `outputs/ablations/summary_A1.md` (copied from the Colab run). Mean ± std over 3 seeds; "best" = best validation epoch (saved checkpoint), "last5" = mean of the last five validation evaluations (epochs 12–20).
+
+| Experiment | AP @ 5 km best | AP @ 5 km last5 | AP @ 10 km best | AP @ 10 km last5 |
+|---|---|---|---|---|
+| `ref` (v1 configuration) | 0.376 ± 0.030 | 0.265 ± 0.033 | 0.657 ± 0.022 | 0.668 ± 0.009 |
+| `births_plus` (raw + nucleus-birth channel) | 0.389 ± 0.039 | 0.311 ± 0.015 | 0.677 ± 0.005 | 0.678 ± 0.011 |
+| `births_only` (births instead of raw hotspots) | 0.123 ± 0.046 | 0.091 ± 0.027 | 0.295 ± 0.012 | 0.292 ± 0.020 |
+
+Rough Welch t-values (n = 3 per group, only indicative): `births_plus` vs. `ref`: AP@5 best 0.5, AP@5 last5 2.2, AP@10 best 1.5, AP@10 last5 1.2; `births_only` vs. `ref`: AP@10 best −25.
+
+Interpretation:
+- **Raw input is essential; birth locations alone are not enough.** `births_only` is far below `ref` (AP@10 0.30 vs. 0.66) and even below the non-learned nucleus-birth baseline (0.24 / 0.57, 5.3). That baseline ranks births by the fire radiative energy of the whole nucleus in the input window; `births_only` sees only *where* nuclei start, not how strong they become, so it cannot tell the few large fires from the many small ones. Hence `births_only` is a "birth locations only" model, not a fair "clustering-only" comparison — the fair one remains the baseline, which `ref` clearly beats (AP 0.38 / 0.66 vs. 0.24 / 0.57).
+- **The clustering adds at most a little on top of the raw input.** `births_plus` is higher on every measure (+0.01 to +0.05 AP), most clearly in the last-five mean at 5 km (0.311 vs. 0.265, t ≈ 2.2) and with lower spread, but none of the differences is conclusive with 3 seeds. Keep as a candidate for the final configuration; it uses satellite data only, so no leakage.
+- **Large best-vs-last5 gap at 5 km** (`ref`: 0.376 best vs. 0.265 last5) while AP @ 10 km is stable (0.657 vs. 0.668): the exact peak position varies strongly from epoch to epoch, and choosing the best of ten validation epochs inflates AP @ 5 km. The last-five mean is the more honest comparison; checkpoint averaging (EMA/SWA) or a decaying learning rate at the end could stabilise it (idea for later).
+- `ref` here (0.376 / 0.657) is higher than v1 (0.302 / 0.664, seed 0, full-precision validation on the M1). Not directly comparable (seeds, half-precision validation, Colab GPU); within the ablation batch all runs share the same settings.
+
+
+### 6.9 Ablation results, session A2 and peak extraction (2026-10-21)
+
+**`ref15` (native 15-min steps)** — summary `outputs/ablations/summary_A2.md`; **only 2 of 3 seeds finished**:
+
+| Experiment | AP @ 5 km best | AP @ 5 km last5 | AP @ 10 km best | AP @ 10 km last5 | min/epoch |
+|---|---|---|---|---|---|
+| `ref` (hourly, 3 seeds) | 0.376 ± 0.030 | 0.265 ± 0.033 | 0.657 ± 0.022 | 0.668 ± 0.009 | 0.50 |
+| `ref15` (15 min, 2 seeds) | 0.327 ± 0.012 | 0.259 ± 0.075 | 0.649 ± 0.052 | 0.661 ± 0.028 | 1.97 |
+
+Rough Welch t (`ref15` − `ref`): AP@5 best −2.5, AP@5 last5 −0.1, AP@10 best −0.2.
+- **No evidence that 15-min steps help.** The last-five means are practically equal (0.259 vs. 0.265 at 5 km, 0.661 vs. 0.668 at 10 km); at the best epoch `ref15` is even lower at 5 km. The spread between seeds is large (AP@5 last5 ± 0.075, AP@10 best ± 0.052).
+- The single-seed advantage of v2 over v1 (6.5: AP@5 0.348 vs. 0.302) was within the seed/epoch noise — exactly the risk noted there. Lesson for the thesis: single runs are not enough to compare configurations.
+- Cost: ~4× training time (1.97 vs. 0.50 min/epoch).
+- **Decision: hourly steps stay the reference** for all further ablations and the final configuration (same accuracy, a quarter of the cost). The third `ref15` seed would only matter if it were far above the other two; optional.
+
+**Peak-extraction ablation** (`src/peak_ablation.py`, checkpoint `convlstm_v1`, full-precision validation on the Colab GPU; `outputs/convlstm_v1_peak_ablation.txt`). The default reproduces v1 exactly (0.302 / 0.664).
+
+| Window | Threshold | Sub-pixel | Points | AP @ 5 km | AP @ 10 km | Recall @ 10 km | Median error @ 5 km |
+|---|---|---|---|---|---|---|---|
+| **3** | 0.02 / **0.05** / 0.1 | **yes** | 42,200 / 4,144 / 3,110 | **0.302** | **0.664** | **0.871** | 3.14 km |
+| 3 | 0.02 / 0.05 / 0.1 | no | (same) | 0.275 | 0.654 | 0.866 | 3.09 km |
+| 5 | 0.02 / 0.05 / 0.1 | yes | 42,196 / 3,961 / 2,976 | 0.293 | 0.654 | 0.848 | 3.16 km |
+| 5 | 0.02 / 0.05 / 0.1 | no | (same) | 0.266 | 0.644 | 0.843 | 3.16 km |
+
+- **Threshold has no effect** on any metric (0.02–0.1): the extra low-probability peaks are all false alarms ranked last, so AP and recall do not change; 0.05 keeps the point list ten times shorter than 0.02.
+- **Sub-pixel refinement helps:** +0.027 AP @ 5 km, +0.010 AP @ 10 km.
+- **A 5 × 5 window is worse** (−0.009 AP @ 5 km, −0.023 recall @ 10 km): it suppresses more nearby peaks, i.e. merges more close ignitions.
+- **Decision: keep the default** (3 × 3, threshold 0.05, sub-pixel). The merging of close ignitions (6.3) is not a post-processing issue; it has to be addressed in training (σ, Tier 3).
+
+Next (changed 2026-10-21): **Phase D first** (Tier 3: D1 `sigma05`, `sigma2`, `neg0`, `neg2`, `target100`; D2 `loss_bce`, `loss_mse`, `neg05`, `ignore0`, `ignore4`, `noflip`), compared with the existing `ref` runs. Phases B (inputs/window) and C (architecture) postponed, still open.

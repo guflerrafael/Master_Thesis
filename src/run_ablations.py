@@ -74,12 +74,13 @@ def main():
     ap.add_argument("--extra", default="", help="extra train.py options for every run")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="tiny runs into ablations_smoke/ to test every option")
+    ap.add_argument("--folder", default="ablations", help="output sub-folder, e.g. ablations_local for runs on another machine")
     args = ap.parse_args()
 
     names = args.only if args.only else [n for n, (t, _, _) in EXPERIMENTS.items() if t in args.tier]
     unknown = set(names) - set(EXPERIMENTS)
     assert not unknown, f"unknown experiments: {unknown}"
-    folder = "ablations_smoke" if args.smoke else "ablations"
+    folder = "ablations_smoke" if args.smoke else args.folder
     seeds = args.seeds[:1] if args.smoke else args.seeds
     runs = [(n, s) for n in names for s in seeds]
     print(f"{len(runs)} runs ({len(names)} experiments × {len(seeds)} seeds) -> models/{folder}/, outputs/{folder}/", flush=True)

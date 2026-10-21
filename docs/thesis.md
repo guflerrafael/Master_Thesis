@@ -2,7 +2,7 @@
 
 > Purpose: single source of truth for future work on this project. It consolidates the thesis proposal (`infos.txt`), the supervisor's messages, the two datasets in `data/raw/` and an independent data audit done when this file was first written (2026-10-01). Numbers marked **[audit]** were computed directly from the raw files, not copied from the proposal.
 >
-> Last updated 2026-10-09. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, sample index + sample builder + evaluation protocol + baselines done (see §13–15). First ConvLSTM trained and beats the baseline on validation (see §16). Step-by-step methods log, with every decision and row count: `notes.md`.
+> Last updated 2026-10-09. Status: data cleaned, time zone resolved, exploration done, hotspots clustered into events/nuclei, sample index + sample builder + evaluation protocol + baselines done (see §13–15). First ConvLSTM trained and beats the baseline on validation (see §16). Step-by-step methods log, with every decision and row count: `notes.md`. Literature (verified references and how they map onto the thesis): `literature.md`. All three files live in `docs/`.
 
 ---
 
@@ -79,8 +79,10 @@ Master_Thesis/
 ├── outputs/*_log.txt          numbers printed by the scripts
 ├── figures/{eda,clustering,tiling,dataset,baselines,model}/
 ├── documents/papers/          reference PDFs (not in git)
-├── notes.md           methods log (basis for the write-up)
-├── thesis.md          this file
+├── docs/
+│   ├── thesis.md      this file
+│   ├── notes.md       methods log (basis for the write-up)
+│   └── literature.md  literature review: verified references, evaluation, alignment with the thesis
 ├── infos.txt          proposal outline + supervisor messages
 ├── requirements.txt
 ├── .gitignore         excludes .venv/, __pycache__/, .DS_Store, documents/
@@ -192,7 +194,7 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 
 ## 11. Reference list (from the proposal)
 
-- Xu et al., 2025 — DL for wildfire monitoring/management (cited in the outline; full reference to be filled in).
+- Xu et al., 2025 — DL for wildfire monitoring/management (cited in the outline; full reference to be filled in — not resolved by the literature search, see `literature.md` §1.2).
 - Shi et al., 2015 — *Convolutional LSTM Network: A Machine Learning Approach for Precipitation Nowcasting* (NeurIPS).
 - Vaswani et al., 2017 — *Attention Is All You Need* (NeurIPS).
 - Data sources: NASA FIRMS (earthdata.nasa.gov … /firms); ERA5-Land hourly (Copernicus CDS, `reanalysis-era5-land`); ICNF (Instituto da Conservação da Natureza e das Florestas) national fire database; EUMETSAT MSG/SEVIRI FRP (supervisor-provided extract).
