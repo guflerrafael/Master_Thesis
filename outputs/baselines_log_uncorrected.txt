@@ -1,0 +1,41 @@
+Predictions per variant (all periods): birth: 25,949, birth, no reappeared: 19,044, birth, no reappeared/persist.: 17,692, first-hour centroid: 17,692
+
+Baselines (test split locked):
+                     baseline split  k [km]  targets    AP  recall (all preds)  precision (all preds)  best F1  P @ best F1  R @ best F1  false alarms / day @ best F1  median error TP [km]  nearest pred ≤ 5 km  nearest pred median [km]
+                        birth train       5     1890 0.219               0.557                  0.107    0.384        0.367        0.403                         0.329                 3.518                0.573                     4.635
+                        birth train      10     1890 0.523               0.806                  0.171    0.605        0.612        0.598                         0.179                 4.205                0.573                     4.635
+                        birth   val       5      389 0.237               0.514                  0.110    0.404        0.424        0.386                         0.279                 3.573                0.527                     4.782
+                        birth   val      10      389 0.569               0.792                  0.184    0.635        0.683        0.594                         0.146                 4.312                0.527                     4.782
+         birth, no reappeared train       5     1890 0.209               0.436                  0.117    0.376        0.408        0.348                         0.239                 3.509                0.447                     5.503
+         birth, no reappeared train      10     1890 0.478               0.629                  0.186    0.581        0.648        0.526                         0.135                 4.156                0.447                     5.503
+         birth, no reappeared   val       5      389 0.231               0.411                  0.129    0.387        0.513        0.311                         0.157                 3.614                0.419                     5.701
+         birth, no reappeared   val      10      389 0.546               0.638                  0.218    0.628        0.709        0.563                         0.123                 4.277                0.419                     5.701
+birth, no reappeared/persist. train       5     1890 0.210               0.429                  0.122    0.380        0.407        0.356                         0.245                 3.509                0.440                     5.584
+birth, no reappeared/persist. train      10     1890 0.475               0.616                  0.193    0.582        0.664        0.518                         0.124                 4.156                0.440                     5.584
+birth, no reappeared/persist.   val       5      389 0.233               0.406                  0.136    0.392        0.417        0.370                         0.275                 3.618                0.414                     5.771
+birth, no reappeared/persist.   val      10      389 0.542               0.625                  0.228    0.632        0.732        0.555                         0.108                 4.255                0.414                     5.771
+          first-hour centroid train       5     1890 0.224               0.445                  0.127    0.394        0.423        0.369                         0.238                 3.494                0.457                     5.430
+          first-hour centroid train      10     1890 0.479               0.617                  0.194    0.584        0.665        0.521                         0.124                 4.070                0.457                     5.430
+          first-hour centroid   val       5      389 0.264               0.440                  0.148    0.426        0.455        0.401                         0.256                 3.746                0.445                     5.414
+          first-hour centroid   val      10      389 0.546               0.625                  0.228    0.633        0.737        0.555                         0.105                 4.257                0.445                     5.414
+
+Recall with all predictions, by subgroup:
+                     baseline split  k [km]  recall | isolated=False  recall | isolated=True  recall | size_class=100–500  recall | size_class=500–1k  recall | size_class=50–100  recall | size_class=≥1k
+                        birth train       5                    0.516                   0.696                        0.562                       0.401                       0.605                    0.503
+                        birth train      10                    0.761                   0.963                        0.820                       0.668                       0.844                    0.737
+                        birth   val       5                    0.445                   0.722                        0.448                       0.537                       0.584                    0.567
+                        birth   val      10                    0.740                   0.948                        0.801                       0.707                       0.818                    0.733
+         birth, no reappeared train       5                    0.366                   0.675                        0.438                       0.332                       0.477                    0.377
+         birth, no reappeared train      10                    0.541                   0.928                        0.636                       0.529                       0.659                    0.575
+         birth, no reappeared   val       5                    0.312                   0.711                        0.320                       0.463                       0.504                    0.467
+         birth, no reappeared   val      10                    0.538                   0.938                        0.619                       0.634                       0.672                    0.600
+birth, no reappeared/persist. train       5                    0.359                   0.666                        0.430                       0.332                       0.466                    0.377
+birth, no reappeared/persist. train      10                    0.529                   0.914                        0.622                       0.529                       0.643                    0.575
+birth, no reappeared/persist.   val       5                    0.308                   0.701                        0.320                       0.463                       0.489                    0.467
+birth, no reappeared/persist.   val      10                    0.524                   0.928                        0.613                       0.634                       0.642                    0.600
+          first-hour centroid train       5                    0.371                   0.699                        0.438                       0.358                       0.490                    0.395
+          first-hour centroid train      10                    0.531                   0.914                        0.623                       0.535                       0.640                    0.587
+          first-hour centroid   val       5                    0.332                   0.763                        0.387                       0.439                       0.511                    0.433
+          first-hour centroid   val      10                    0.524                   0.928                        0.619                       0.634                       0.635                    0.600
+
+figure: figures/baselines/pr_curves_val.png

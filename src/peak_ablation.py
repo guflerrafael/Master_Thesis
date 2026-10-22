@@ -33,7 +33,7 @@ def main():
     print(f"checkpoint {args.name} (epoch {ck['epoch']}); {len(maps)} validation maps")
     rows = []
     for window, thr, sub in itertools.product(WINDOWS, THRESHOLDS, SUBPIXEL):
-        pts = maps_to_points(maps, window=window, thr=thr, subpixel=sub)
+        pts = maps_to_points(maps, data.georef_fix, window=window, thr=thr, subpixel=sub)
         r = {"window": window, "threshold": thr, "subpixel": sub, "points": len(pts)}
         for k in (5, 10):
             res, _, _ = evaluate(pts, data, "val", k)

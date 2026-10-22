@@ -12,6 +12,8 @@ for the full grid (177 x 106) or a crop (i0, j0, size). Framework-free (numpy).
 Run from the repository root (checks + example figure):
   .venv/bin/python src/dataset.py > outputs/dataset_check_log.txt
 """
+import json
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -37,6 +39,8 @@ class FireData:
         self.labels = pd.read_parquet(root / "labels.parquet")
         self.periods = pd.read_parquet(root / "periods.parquet")
         self.static = dict(np.load(root / "static.npz"))
+        info = root / "build_info.json"     # missing for builds before the geo-referencing correction
+        self.georef_fix = json.loads(info.read_text()).get("georef_fix", False) if info.exists() else False
         self._slot = self.det["slot"].values
         self._i, self._j = self.det["i"].values.astype(int), self.det["j"].values.astype(int)
         self._frp = (np.log1p(self.det["frp_mw"].values) / FRP_NORM).astype(np.float32)

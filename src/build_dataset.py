@@ -7,14 +7,26 @@ Outputs (data/processed/model/):
                       the 15-min slot; plus event_id / nucleus_id / persistent / in_pt
   fires.parquet       ICNF fires >= IGNORE_HA (2004-2019, valid coordinates, UTC start) with
                       continuous image position (i_f, j_f), seen flag, period, split, isolation
-  labels.parquet      (period, fire) pairs with role 'target' or 'ignore'
+  labels.parquet      (period, fire) pairs with role 'target' or 'ignore'; i_f / j_f here are the
+                      ignition position in the SEVIRI *sensor* frame of that period (see below)
   periods.parquet     one row per 12 h target period: split, detections, targets, ignores
   static.npz          per-cell lat, lon, mainland mask (pt), loss mask (pt dilated by 1 px),
                       persistent off-season pixels
+  build_info.json     settings of this build (geo-referencing correction on/off, change date)
+
+Geo-referencing correction (notes.md 6.11, default on): SEVIRI positions before
+grid.GEOREF_CHANGE lie half a native pixel north-west of the true ground position. Detections are
+kept on their native pixels; the ICNF ignition positions are moved into the sensor frame of each
+period (labels.parquet) and the 'seen' test compares ICNF with SEVIRI in the same frame.
+fires.parquet keeps the true positions. Predictions are moved back to the true frame before
+scoring (train.maps_to_points, baselines.py). --no-georef-fix reproduces the uncorrected build.
 
 Run from the repository root:
   .venv/bin/python src/build_dataset.py > outputs/build_dataset_log.txt
 """
+import json
+import sys
+
 import numpy as np
 import pandas as pd
 from scipy.ndimage import binary_dilation
@@ -47,13 +59,17 @@ def detections():
     return d
 
 
-def fires(det):
+def fires(det, georef_fix=True):
     icnf = pd.read_parquet(PROC / "icnf_fires.parquet")
     f = icnf[icnf["lat"].notna() & icnf["start_utc"].notna()
              & icnf["start_utc"].between(pd.Timestamp(E.PERIOD[0], tz="UTC"), pd.Timestamp(E.PERIOD[1], tz="UTC"))
              & (icnf["burned_area_ha"] >= IGNORE_HA)].reset_index(drop=True)
     f["i_f"], f["j_f"] = G.latlon_to_ij(f["lat"].values, f["lon"].values)
-    f["seen"] = seen(f, det)
+    if georef_fix:     # compare ICNF and SEVIRI in the same (sensor) frame
+        lat_s, lon_s = G.true_to_sensor_latlon(f["lat"].values, f["lon"].values, f["start_utc"])
+        f["seen"] = seen(f.assign(lat=lat_s, lon=lon_s), det)
+    else:
+        f["seen"] = seen(f, det)
     f["period"] = period_of(f["start_utc"])
     f["year"] = f["start_utc"].dt.year
     f["split"] = f["year"].map({y: k for k, ys in SPLIT.items() for y in ys})
@@ -65,7 +81,7 @@ def fires(det):
               "municipality", "district", "seen", "is_target", "isolated", "period", "year", "split"]]
 
 
-def labels(f):
+def labels(f, georef_fix=True):
     own = f[["period", "fire_id"]].assign(role=np.where(f["is_target"], "target", "ignore"))
     # target-size fires starting within BOUNDARY_H outside a period: ignore in that period
     b = pd.Timedelta(hours=BOUNDARY_H)
@@ -77,7 +93,10 @@ def labels(f):
         near_next.assign(period=near_next["period"] + pd.Timedelta(hours=PERIOD_H)),
     ])[["period", "fire_id"]].assign(role="ignore")
     lab = pd.concat([own, extra], ignore_index=True)
-    return lab.merge(f[["fire_id", "i_f", "j_f"]], on="fire_id")
+    lab = lab.merge(f[["fire_id", "i_f", "j_f"]], on="fire_id")
+    if georef_fix:     # ignition position in the sensor frame of the label's period
+        lab["i_f"], lab["j_f"] = G.true_to_sensor_ij(lab["i_f"].values, lab["j_f"].values, lab["period"])
+    return lab
 
 
 def periods(det, lab):
@@ -111,9 +130,12 @@ def static(det):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    georef_fix = "--no-georef-fix" not in sys.argv
     det = detections()
-    f = fires(det)
-    lab = labels(f)
+    f = fires(det, georef_fix)
+    lab = labels(f, georef_fix)
+    print(f"Geo-referencing correction: {'ON' if georef_fix else 'OFF'}"
+          + (f" (labels before {G.GEOREF_CHANGE} moved {G.GEOREF_SHIFT_PX} px north-west into the sensor frame)" if georef_fix else ""))
     per = periods(det, lab)
     st = static(det)
 
@@ -125,6 +147,9 @@ def main():
     ti, tj = np.round(f.loc[f["is_target"], "i_f"]).astype(int), np.round(f.loc[f["is_target"], "j_f"]).astype(int)
     outside = ~st["pt_loss"][ti.clip(0, G.H - 1), tj.clip(0, G.W - 1)]
     print(f"Targets outside the loss mask: {outside.sum()}")
+    lt = lab[lab["role"] == "target"]
+    li, lj = np.round(lt["i_f"]).astype(int).clip(0, G.H - 1), np.round(lt["j_f"]).astype(int).clip(0, G.W - 1)
+    print(f"Target labels (sensor frame) outside the loss mask: {(~st['pt_loss'][li, lj]).sum()}")
     print(f"Labels: {(lab['role'] == 'target').sum():,} target and {(lab['role'] == 'ignore').sum():,} ignore entries "
           f"({len(lab) - len(f):,} extra ignores from the ±{BOUNDARY_H} h boundary rule)")
     print("\nPeriods by split:")
@@ -137,7 +162,10 @@ def main():
     lab.to_parquet(OUT / "labels.parquet", index=False)
     per.to_parquet(OUT / "periods.parquet", index=False)
     np.savez_compressed(OUT / "static.npz", **st)
-    print(f"\nwritten: {OUT.relative_to(E.ROOT)}/ (detections, fires, labels, periods .parquet, static.npz)")
+    info = {"georef_fix": georef_fix, "georef_change": G.GEOREF_CHANGE, "georef_shift_px": G.GEOREF_SHIFT_PX,
+            "targets": int(f["is_target"].sum()), "labels": len(lab)}
+    (OUT / "build_info.json").write_text(json.dumps(info, indent=1))
+    print(f"\nwritten: {OUT.relative_to(E.ROOT)}/ (detections, fires, labels, periods .parquet, static.npz, build_info.json)")
 
 
 if __name__ == "__main__":

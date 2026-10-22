@@ -6,6 +6,7 @@ geostationary projection with sub-satellite longitude 0 deg (all of 2004-2019):
 Image arrays use index i = ROW_MAX - row (north at the top) and j = col - COL_MIN.
 """
 import numpy as np
+import pandas as pd
 from pyproj import Transformer
 
 SSD = 3000.403165817   # SEVIRI sampling distance at nadir [m]
@@ -49,4 +50,44 @@ def ij_to_latlon(i, j):
 def cell_latlon():
     """(H, W) arrays with the lat/lon of every cell centre."""
     i, j = np.mgrid[0:H, 0:W]
+    return ij_to_latlon(i, j)
+
+
+# ---------------------------------------------------------------- SEVIRI geo-referencing offset
+# Until December 2017 SEVIRI Level 1.5 data is shifted by 1.5 km at the sub-satellite point (= half a
+# native pixel) to the north and west of the nominal geostationary projection; EUMETSAT corrected
+# this in December 2017 (satpy SEVIRI reader documentation; notes.md 6.11). The FRP extract's
+# pixel positions before the change therefore lie half a pixel north-west of the true ground
+# position. Measured from ICNF ignitions vs. first SEVIRI detections: +0.46 px east, -0.52 px north
+# between the two periods. The exact day in December 2017 is not documented in the sources found;
+# only 2 target fires fall between mid-October 2017 and February 2018, so the choice hardly matters.
+GEOREF_CHANGE = "2017-12-01"   # first day treated as corrected (UTC)
+GEOREF_SHIFT_PX = 0.5          # native pixels, in both directions
+
+
+def georef_shift(times):
+    """Shift [native px] that applies at the given UTC time(s): 0.5 before the change, else 0."""
+    t = pd.to_datetime(np.atleast_1d(times), utc=True)
+    return np.where(t < pd.Timestamp(GEOREF_CHANGE, tz="UTC"), GEOREF_SHIFT_PX, 0.0)
+
+
+def true_to_sensor_ij(i, j, times):
+    """True ground position -> position in the (possibly shifted) SEVIRI image: north-west,
+    i.e. smaller i (north) and smaller j (west)."""
+    s = georef_shift(times)
+    return np.asarray(i) - s, np.asarray(j) - s
+
+
+def sensor_to_true_ij(i, j, times):
+    s = georef_shift(times)
+    return np.asarray(i) + s, np.asarray(j) + s
+
+
+def true_to_sensor_latlon(lat, lon, times):
+    i, j = true_to_sensor_ij(*latlon_to_ij(lat, lon), times)
+    return ij_to_latlon(i, j)
+
+
+def sensor_to_true_latlon(lat, lon, times):
+    i, j = sensor_to_true_ij(*latlon_to_ij(lat, lon), times)
     return ij_to_latlon(i, j)

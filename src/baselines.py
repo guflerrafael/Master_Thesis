@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 import eda_figures as E
+import grid as G
 from build_dataset import period_of
 from dataset import FireData
 from evaluate import evaluate
@@ -49,6 +50,10 @@ def predictions(data):
     lat1h, lon1h = w["wl"].sum() / w["frp_mw"].sum(), w["wo"].sum() / w["frp_mw"].sum()
 
     nu = nu.reset_index(drop=True)
+    if data.georef_fix:     # sensor frame -> true frame for births before the change (notes.md 6.11)
+        nu["lat_birth"], nu["lon_birth"] = G.sensor_to_true_latlon(nu["lat_birth"].values, nu["lon_birth"].values, nu["t_birth"])
+        tb = birth.reindex(lat1h.index)
+        lat1h[:], lon1h[:] = G.sensor_to_true_latlon(lat1h.values, lon1h.values, tb)
     base = pd.DataFrame({"period": nu["period"], "lat": nu["lat_birth"], "lon": nu["lon_birth"],
                          "score": nu["nucleus_id"].map(score), "reappeared": nu["reappeared"],
                          "persistent": nu["share_persistent"] >= 0.5, "nucleus_id": nu["nucleus_id"]})

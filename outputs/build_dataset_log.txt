@@ -1,14 +1,16 @@
+Geo-referencing correction: ON (labels before 2017-12-01 moved 0.5 px north-west into the sensor frame)
 Grid: 177 × 106 cells; mainland Portugal cells: 6,127 (loss mask incl. 1-px border: 6,760); persistent off-season cells: 142
 Detections: 568,123 (all inside the grid)
-Fires ≥ 10 ha: 10,911; targets (≥ 50 ha and seen): 2,705; isolated targets: 657
+Fires ≥ 10 ha: 10,911; targets (≥ 50 ha and seen): 2,821; isolated targets: 679
 Targets outside the loss mask: 0
-Labels: 2,705 target and 8,427 ignore entries (221 extra ignores from the ±1 h boundary rule)
+Target labels (sensor frame) outside the loss mask: 0
+Labels: 2,821 target and 8,324 ignore entries (234 extra ignores from the ±1 h boundary rule)
 
 Periods by split:
        periods  with_detections  with_targets  targets
 split                                                 
-train     8000             4469           775     1890
-val       1462              844           160      389
-test      2186             1265           212      426
+train     8000             4469           805     1979
+val       1462              844           163      403
+test      2186             1265           215      439
 
-written: data/processed/model/ (detections, fires, labels, periods .parquet, static.npz)
+written: data/processed/model/ (detections, fires, labels, periods .parquet, static.npz, build_info.json)

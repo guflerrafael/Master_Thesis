@@ -1,0 +1,2 @@
+15 runs (5 experiments × 3 seeds) -> models/ablations_georef/, outputs/ablations_georef/
+[1/15] ablations_georef/ref_s0: reference = v1 (hourly) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/ref_s0 --seed 0

@@ -1,0 +1,43 @@
+{
+ "name": "ablations_local/ignore0_s1",
+ "best_mean_ap": 0.5370111175928417,
+ "epochs": 20,
+ "config": {
+  "step_agg": 4,
+  "channels": [
+   "frp",
+   "confidence",
+   "detected",
+   "period",
+   "time",
+   "pt",
+   "persistent"
+  ],
+  "history_h": 6,
+  "tail_h": 6,
+  "arch": "convlstm",
+  "layers": 2,
+  "hidden": 32,
+  "kernel": 3,
+  "readout": "last",
+  "crop": 32,
+  "sigma": 1.0,
+  "ignore_r": 0.0,
+  "min_target_ha": null,
+  "loss": "focal",
+  "neg_ratio": 1.0,
+  "flip": true,
+  "name": "ablations_local/ignore0_s1",
+  "epochs": 20,
+  "batch": 16,
+  "lr": 0.001,
+  "val_every": 2,
+  "max_batches": 0,
+  "val_periods": 0,
+  "seed": 1,
+  "workers": 0,
+  "val_batch": 16,
+  "val_amp": false,
+  "no_flip": false
+ }
+}

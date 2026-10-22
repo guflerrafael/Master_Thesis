@@ -1,0 +1,7 @@
+{
+ "georef_fix": true,
+ "georef_change": "2017-12-01",
+ "georef_shift_px": 0.5,
+ "targets": 2821,
+ "labels": 11145
+}

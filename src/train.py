@@ -205,17 +205,22 @@ def predict_maps(model, data, periods, cfg, device, batch=16, amp=False):
     return out
 
 
-def maps_to_points(maps, **peak):
+def maps_to_points(maps, georef_fix=False, **peak):
+    """Peaks of every map -> points (period, lat, lon, score) in the TRUE frame: with the
+    geo-referencing correction (data.georef_fix), the sensor-frame peaks of periods before
+    grid.GEOREF_CHANGE are moved half a pixel south-east (notes.md 6.11)."""
     rows = []
     for p, prob in maps.items():
         fi, fj, s = heatmap_to_points(prob, **peak)
+        if georef_fix:
+            fi, fj = G.sensor_to_true_ij(fi, fj, p)
         lat, lon = G.ij_to_latlon(fi, fj)
         rows.append(pd.DataFrame({"period": p, "lat": lat, "lon": lon, "score": s}))
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["period", "lat", "lon", "score"])
 
 
 def predict(model, data, periods, cfg, device, batch=16, amp=False, **peak):
-    return maps_to_points(predict_maps(model, data, periods, cfg, device, batch, amp), **peak)
+    return maps_to_points(predict_maps(model, data, periods, cfg, device, batch, amp), data.georef_fix, **peak)
 
 
 def load_model(name, device):

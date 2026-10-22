@@ -1,0 +1,37 @@
+18 runs (6 experiments × 3 seeds) -> models/ablations_local/, outputs/ablations_local/
+[1/18] ablations_local/loss_bce_s0: weighted BCE instead of focal loss | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/loss_bce_s0 --seed 0 --loss bce
+    ok in 31.6 min (total 32 min)
+[2/18] ablations_local/loss_bce_s1: weighted BCE instead of focal loss | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/loss_bce_s1 --seed 1 --loss bce
+    ok in 31.5 min (total 63 min)
+[3/18] ablations_local/loss_bce_s2: weighted BCE instead of focal loss | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/loss_bce_s2 --seed 2 --loss bce
+    ok in 31.5 min (total 95 min)
+[4/18] ablations_local/loss_mse_s0: MSE instead of focal loss | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/loss_mse_s0 --seed 0 --loss mse
+    ok in 31.4 min (total 126 min)
+[5/18] ablations_local/loss_mse_s1: MSE instead of focal loss | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/loss_mse_s1 --seed 1 --loss mse
+    ok in 32.4 min (total 158 min)
+[6/18] ablations_local/loss_mse_s2: MSE instead of focal loss | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/loss_mse_s2 --seed 2 --loss mse
+    ok in 33.8 min (total 192 min)
+[7/18] ablations_local/neg05_s0: 0.5 hard negatives per positive | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/neg05_s0 --seed 0 --neg-ratio 0.5
+    ok in 25.9 min (total 218 min)
+[8/18] ablations_local/neg05_s1: 0.5 hard negatives per positive | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/neg05_s1 --seed 1 --neg-ratio 0.5
+    ok in 25.9 min (total 244 min)
+[9/18] ablations_local/neg05_s2: 0.5 hard negatives per positive | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/neg05_s2 --seed 2 --neg-ratio 0.5
+    ok in 25.8 min (total 270 min)
+[10/18] ablations_local/ignore0_s0: no ignore regions in training | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/ignore0_s0 --seed 0 --ignore-r 0
+    ok in 31.7 min (total 302 min)
+[11/18] ablations_local/ignore0_s1: no ignore regions in training | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/ignore0_s1 --seed 1 --ignore-r 0
+    ok in 31.8 min (total 333 min)
+[12/18] ablations_local/ignore0_s2: no ignore regions in training | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/ignore0_s2 --seed 2 --ignore-r 0
+    ok in 31.8 min (total 365 min)
+[13/18] ablations_local/ignore4_s0: ignore radius 4 px in training | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/ignore4_s0 --seed 0 --ignore-r 4
+    ok in 31.8 min (total 397 min)
+[14/18] ablations_local/ignore4_s1: ignore radius 4 px in training | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/ignore4_s1 --seed 1 --ignore-r 4
+    ok in 31.5 min (total 429 min)
+[15/18] ablations_local/ignore4_s2: ignore radius 4 px in training | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/ignore4_s2 --seed 2 --ignore-r 4
+    ok in 32.0 min (total 460 min)
+[16/18] ablations_local/noflip_s0: no flip augmentation | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/noflip_s0 --seed 0 --no-flip
+    ok in 31.9 min (total 492 min)
+[17/18] ablations_local/noflip_s1: no flip augmentation | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/noflip_s1 --seed 1 --no-flip
+    ok in 32.0 min (total 524 min)
+[18/18] ablations_local/noflip_s2: no flip augmentation | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_local/noflip_s2 --seed 2 --no-flip
+    ok in 32.1 min (total 557 min)

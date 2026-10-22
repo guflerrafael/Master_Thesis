@@ -903,3 +903,98 @@ Rough Welch t (`ref15` − `ref`): AP@5 best −2.5, AP@5 last5 −0.1, AP@10 be
 - **Decision: keep the default** (3 × 3, threshold 0.05, sub-pixel). The merging of close ignitions (6.3) is not a post-processing issue; it has to be addressed in training (σ, Tier 3).
 
 Next (changed 2026-10-21): **Phase D first** (Tier 3: D1 `sigma05`, `sigma2`, `neg0`, `neg2`, `target100`; D2 `loss_bce`, `loss_mse`, `neg05`, `ignore0`, `ignore4`, `noflip`), compared with the existing `ref` runs. Phases B (inputs/window) and C (architecture) postponed, still open.
+
+### 6.10 Ablation results, session D1 — run locally (2026-10-22)
+
+Colab time ran out; D1 and the following sessions run on the M1 with `src/run_ablations.py --folder ablations_local` (option added 2026-10-21), no `--workers`, full-precision validation (`--val-amp` only works on CUDA). Because hardware and validation precision differ from Colab, **`ref` was re-run locally** and local runs are only compared with the local `ref`. Summary: `outputs/ablations_local/summary.{md,csv}`; 3 seeds each; ~32 min per run.
+
+| Experiment | AP @ 5 km best / last5 | AP @ 10 km best / last5 | Recall @ 10 km non-isolated (best) | Median error @ 5 km (best) | min/epoch |
+|---|---|---|---|---|---|
+| `ref` (local) | 0.346 ± 0.060 / 0.309 ± 0.039 | 0.667 ± 0.016 / 0.665 ± 0.016 | 0.826 | 3.11 km | 1.19 |
+| `sigma05` | 0.390 ± 0.072 / 0.342 ± 0.059 | 0.674 ± 0.031 / 0.669 ± 0.026 | 0.861 | 2.81 km | 1.19 |
+| `sigma2` | 0.327 ± 0.030 / 0.291 ± 0.016 | 0.637 ± 0.008 / 0.637 ± 0.007 | 0.771 | 3.16 km | 1.19 |
+| `neg0` | 0.358 ± 0.043 / 0.273 ± 0.044 | 0.644 ± 0.025 / 0.650 ± 0.012 | 0.822 | 3.22 km | 0.60 |
+| `neg2` | 0.406 ± 0.024 / 0.301 ± 0.036 | 0.683 ± 0.028 / 0.686 ± 0.011 | 0.844 | 2.91 km | 1.78 |
+| `target100` | 0.381 ± 0.030 / 0.299 ± 0.030 | 0.654 ± 0.009 / 0.662 ± 0.020 | 0.821 | 3.14 km | 0.76 |
+
+Rough Welch t vs. `ref` (AP@5 best / last5, AP@10 best / last5): `sigma05` +0.8 / +0.8 / +0.3 / +0.2; `sigma2` −0.5 / −0.7 / −3.0 / −2.9; `neg0` +0.3 / −1.0 / −1.4 / −1.3; `neg2` +1.6 / −0.3 / +0.8 / +1.9; `target100` +0.9 / −0.3 / −1.3 / −0.2.
+
+Interpretation:
+- **Target width σ matters, narrower is better.** σ = 2 px is clearly worse at 10 km (t ≈ −3) and finds fewer non-isolated fires (0.77 vs. 0.83): wide targets make the model blur close ignitions together. σ = 0.5 px is better on every measure (AP @ 5 km +0.03–0.04, recall non-isolated +3.5 points, median error −0.3 km). Not significant with 3 seeds (large spread), but consistent in direction and with the merging problem of 6.3 — the most promising change so far.
+- **Hard negatives help a little.** Without them (`neg0`) AP @ 10 km drops by ~0.02 (t ≈ −1.4), at half the training time. With two per positive (`neg2`) AP @ 10 km is the highest (last5 0.686, t ≈ 1.9); caveat: `neg2` also trains on 1.5× more crops per epoch, so part of the gain may be more training.
+- **Targets ≥ 100 ha only: no gain** (AP @ 10 km slightly lower) → keep ≥ 50 ha (more labels).
+- The local `ref` differs from the Colab `ref` (AP@5 last5 0.309 vs. 0.265) — another reason to compare only within one machine.
+
+Next: D2 (`loss_bce`, `loss_mse`, `neg05`, `ignore0`, `ignore4`, `noflip`) locally; 2 extra seeds (3, 4) for `ref`, `sigma05`, `neg2`; then a combination run (σ = 0.5 + 2 hard negatives, possibly + births channel) as candidate final configuration; possibly σ = 0.75.
+
+### 6.11 Ablation results, session D2 — and a systematic SEVIRI position offset (2026-10-23)
+
+Local runs (M1, `--folder ablations_local`, 3 seeds, compared with the local `ref`); summary `outputs/ablations_local/summary_D1_D2.md`.
+
+| Experiment | AP @ 5 km best / last5 | AP @ 10 km best / last5 | Recall @ 10 km (non-isol.) | Median error @ 5 km | t vs. `ref` (AP5b / AP5l / AP10b / AP10l) |
+|---|---|---|---|---|---|
+| `ref` | 0.346 ± 0.060 / 0.309 ± 0.039 | 0.667 ± 0.016 / 0.665 ± 0.016 | 0.869 (0.826) | 3.11 km | |
+| `loss_bce` | 0.415 ± 0.052 / 0.343 ± 0.023 | 0.668 ± 0.007 / 0.667 ± 0.007 | 0.812 (0.767) | 3.02 km | +1.5 / +1.3 / +0.1 / +0.2 |
+| `loss_mse` | 0.428 ± 0.014 / 0.347 ± 0.012 | 0.655 ± 0.011 / 0.660 ± 0.008 | 0.810 (0.764) | 3.02 km | +2.3 / +1.6 / −1.1 / −0.5 |
+| `neg05` | 0.337 ± 0.039 / 0.283 ± 0.028 | 0.666 ± 0.022 / 0.670 ± 0.013 | 0.871 (0.830) | 3.15 km | −0.2 / −0.9 / −0.1 / +0.4 |
+| `ignore0` | 0.385 ± 0.071 / 0.324 ± 0.052 | 0.682 ± 0.015 / 0.675 ± 0.010 | 0.873 (0.833) | 3.00 km | +0.7 / +0.4 / +1.1 / +0.9 |
+| `ignore4` | 0.328 ± 0.021 / 0.286 ± 0.025 | 0.653 ± 0.029 / 0.649 ± 0.013 | 0.854 (0.808) | 3.09 km | −0.5 / −0.9 / −0.8 / −1.4 |
+| **`noflip`** | **0.615 ± 0.012 / 0.580 ± 0.045** | 0.690 ± 0.018 / 0.657 ± 0.039 | 0.896 (0.864) | **1.79 km** | **+7.6 / +7.8** / +1.7 / −0.3 |
+
+- `loss_bce` / `loss_mse`: higher AP @ 5 km but lower recall (0.81 vs. 0.87): sharper, more confident peaks, more fires missed. AP @ 10 km unchanged. A trade-off, not a clear win.
+- `neg05`: no change; `ignore0` slightly better, `ignore4` slightly worse — the ignore regions do not help training (not significant).
+- **`noflip`: AP @ 5 km almost doubles, median error 3.1 → 1.8 km** (t ≈ +7.6). Flips mirror inputs and targets consistently (checked), so this is not a bug: there is a *directional* pattern that flipping destroys.
+
+**Cause: a systematic offset between SEVIRI and ICNF positions.** For all 2,705 targets: vector from the nucleus birth (first SEVIRI detection, 3.2) to the ICNF ignition point = **+1.49 ± 0.06 km east, −2.95 ± 0.07 km north** (median +1.72 / −3.12; |mean| 3.3 km). The real spread of the fires is small in comparison (nucleus centroid − birth: +0.03 east, −0.39 north). Median offset by year:
+
+| Years | East | North |
+|---|---|---|
+| 2004–2017 (each year) | +1.4 … +2.1 km | −2.7 … −3.5 km |
+| 2018 | +0.21 km | −0.58 km |
+| 2019 | −0.10 km | −0.75 km |
+| before 2017-12-06 (n = 2,581) | **+1.79 km** | **−3.19 km** |
+| from 2017-12-06 (n = 124) | +0.10 km | −0.74 km |
+
+- A step change at the end of 2017. The difference before − after (≈ +1.7 km east, −2.45 km north) is **about half a SEVIRI pixel in both directions** (pixel ≈ 3.2 × 4.5 km over Portugal).
+- Hypothesis (from memory, **to be verified against EUMETSAT documentation**): EUMETSAT corrected a half-pixel georeferencing offset of SEVIRI Level 1.5 data in December 2017; the FRP extract's lat/lon before that date would then be shifted by ~half a pixel to the north-west.
+- `noflip` learns "move the prediction ~3 km south-south-east" — correct for 2004–2017 data, but it would be **wrong for 2018–2019** (part of the test split). So `noflip` is not a fix; it exploits a data artefact.
+
+Consequences (to be worked through):
+1. **Most of the "first hotspot is ~4 km from the ignition" error so far is this offset**, not fire physics or label noise (2.1, 3.2, 5.3). After correction, the baseline and the models should become much more precise; the sub-pixel question (4.2) needs to be re-assessed.
+2. **All km-based results so far are affected** (baselines, v1/v2, ablations): they compare against ICNF with a ~3 km bias before 2018. Relative comparisons between ablations of the same batch stay meaningful, except for anything that interacts with direction (flips) or with the peak precision (σ, losses at 5 km).
+3. Fix in the data, not in the model: correct the SEVIRI positions before the change date (once the size and date are confirmed), rebuild the sample index, re-run the baselines and a new `ref`, then re-check `noflip` (should lose its advantage) and `sigma05`.
+
+**Verification of the offset (2026-10-23).**
+- satpy SEVIRI Level 1.5 reader documentation (https://satpy.readthedocs.io/en/latest/api/satpy.readers.seviri_l1b_native.html): "Until December 2017, the data is shifted by 1.5km SSP North and West against the nominal GEOS projection." Since December 2017 the offset is corrected; a flag in the data indicates whether the correction was applied. Same statement and an illustration of the back-shift (to the south-east) in the satpy developer memo (https://github.com/pytroll/satpy/wiki/SEVIRI-georeferencing-offset-correction).
+- EUMETSAT service notices (relayed by NOAA, seen only in search results, pages not reachable): a new Image Processing Facility release correcting the geo-referencing offset of SEVIRI Level 1.5 data, planned for March 2017, then postponed to 2017-09-20. **The exact operational day in December 2017 was not found** (the "6 December" in 6.11 was from memory and is unconfirmed).
+- 1.5 km at the sub-satellite point = half a native SEVIRI pixel (sampling distance 3 km). Measured in native pixels (ICNF ignition − nucleus birth, targets): before Dec 2017 +0.46 px east, −0.69 px north (n = 2,581); after +0.00 px east, −0.16 px north (n = 124); **difference +0.46 px east, −0.52 px north = the documented half-pixel shift**, measured independently from fire records. The remaining −0.16 px (≈ 0.7 km south) is present in both periods (fire behaviour or ICNF bias, not geolocation).
+- The exact day hardly matters here: between 2017-10-16 and 2018-02-28 there are only 2 target fires (2017-11-22, 2018-02-25) and 1,056 detections in Portugal.
+
+**Planned correction.** Correct the labels, not the detections: detections stay on the exact native grid; for periods before the change date (setting, default 2017-12-01) the ICNF ignition positions are moved half a pixel north-west into the shifted sensor frame, and predictions / nucleus births of those periods are moved half a pixel south-east before scoring against ICNF. Then re-run the baselines, a new `ref` and the key ablations (`noflip`, `sigma05`).
+
+### 6.12 Geo-referencing correction implemented (2026-10-23)
+
+Code:
+- `src/grid.py`: `GEOREF_CHANGE = "2017-12-01"` (first day treated as corrected; exact day undocumented, see 6.11), `GEOREF_SHIFT_PX = 0.5`; `true_to_sensor_ij/latlon`, `sensor_to_true_ij/latlon` (sensor = true + half a pixel north-west before the change).
+- `src/build_dataset.py` (default on, `--no-georef-fix` reproduces the old build): detections stay on their native pixels; `labels.parquet` holds the ignition position in the sensor frame of each period; the "seen" test compares ICNF and SEVIRI in the same frame; `fires.parquet` keeps the true positions; `build_info.json` records the setting. `src/dataset.py` reads it (`FireData.georef_fix`).
+- `src/train.py` (`maps_to_points`), `src/baselines.py`, `src/peak_ablation.py`: predictions / nucleus births of periods before the change are moved half a pixel south-east (true frame) before scoring against ICNF.
+- Not changed: the exploratory analyses of sections 2–4 (time zone check, proximity, clustering diagnostics, tiling design) still compare uncorrected positions; their qualitative conclusions stand, distances in km there include the offset.
+
+Rebuilt sample index (`outputs/build_dataset_log.txt`): **2,821 targets** (before: 2,705; +116 fires whose first detection had been pushed outside the 5 km "seen" radius by the offset), 8,324 ignore entries; train / val / test targets 1,979 / 403 / 439. All checks pass (`outputs/dataset_check_log.txt`). Label − nucleus birth in the sensor frame, median: before the change −0.01 px east, −0.22 px north (n = 2,697); after +0.00 / −0.16 px (n = 124) → **the offset is gone**.
+
+Nucleus-birth baseline on the corrected data (validation 2015–2016; uncorrected numbers in `outputs/baselines_log_uncorrected.txt`):
+
+| | uncorrected | **corrected** |
+|---|---|---|
+| target ignitions | 389 | 403 |
+| AP @ 5 km | 0.237 | **0.448** |
+| AP @ 10 km | 0.569 | 0.577 |
+| recall @ 5 km (all predictions) | 0.51 | **0.71** |
+| recall @ 5 km isolated / non-isolated | 0.72 / 0.45 | **0.92 / 0.65** |
+| median error of matches @ 5 / 10 km | 3.6 / 4.3 km | **2.2 / 2.3 km** |
+| nearest prediction ≤ 5 km / median distance | 53 % / 4.8 km | **73 % / 2.8 km** |
+
+Consequences:
+- **The first SEVIRI detection is ~2.2 km from the ICNF ignition, not ~4 km**; well below one pixel diagonal (~5.5 km). The 3.3 km offset rarely mattered at 10 km but cost most of the precision at 5 km.
+- The uncorrected models (v1/v2, all ablations so far) are now below the corrected baseline at 5 km (`ref` AP@5 ≈ 0.35–0.38 vs. 0.45): they learned against shifted labels. **All models have to be retrained on the corrected data**; the earlier results stay valid as documentation of the uncorrected setting and for relative comparisons within their batch.
+- Next: new `ref` + `noflip`, `sigma05`, `neg2`, `births_plus` (3 seeds each) on the corrected data in `--folder ablations_georef`.
