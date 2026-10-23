@@ -998,3 +998,27 @@ Consequences:
 - **The first SEVIRI detection is ~2.2 km from the ICNF ignition, not ~4 km**; well below one pixel diagonal (~5.5 km). The 3.3 km offset rarely mattered at 10 km but cost most of the precision at 5 km.
 - The uncorrected models (v1/v2, all ablations so far) are now below the corrected baseline at 5 km (`ref` AP@5 ≈ 0.35–0.38 vs. 0.45): they learned against shifted labels. **All models have to be retrained on the corrected data**; the earlier results stay valid as documentation of the uncorrected setting and for relative comparisons within their batch.
 - Next: new `ref` + `noflip`, `sigma05`, `neg2`, `births_plus` (3 seeds each) on the corrected data in `--folder ablations_georef`.
+
+### 6.13 Ablations on the corrected data (2026-10-23)
+
+Local (M1), `--folder ablations_georef`, 3 seeds each, corrected build (6.12); summary `outputs/ablations_georef/summary_georef1.md`. Corrected nucleus-birth baseline for comparison: AP@5 0.448, AP@10 0.577, recall@10 0.804 (non-isolated 0.753), median error @ 5 km 2.19 km.
+
+| Experiment | AP @ 5 km best / last5 | AP @ 10 km best / last5 | Recall @ 10 km (non-isol.) | Median error @ 5 km | t vs. `ref` (AP5b / AP5l / AP10b / AP10l) |
+|---|---|---|---|---|---|
+| **`ref`** | **0.604 ± 0.016 / 0.597 ± 0.015** | **0.687 ± 0.003 / 0.681 ± 0.007** | 0.887 (0.853) | 2.08 km | |
+| `births_plus` | 0.590 ± 0.047 / 0.577 ± 0.057 | 0.669 ± 0.044 / 0.661 ± 0.050 | 0.883 (0.848) | 2.12 km | −0.5 / −0.6 / −0.7 / −0.7 |
+| `sigma05` | 0.604 ± 0.002 / 0.596 ± 0.004 | 0.681 ± 0.011 / 0.678 ± 0.009 | 0.897 (0.867) | 2.08 km | −0.0 / −0.1 / −0.9 / −0.4 |
+| **`neg2`** | **0.618 ± 0.009 / 0.614 ± 0.009** | **0.705 ± 0.011 / 0.699 ± 0.009** | 0.891 (0.859) | 2.09 km | **+1.3 / +1.7 / +2.8 / +2.6** |
+| `noflip` | 0.633 ± 0.011 / 0.613 ± 0.021 | 0.686 ± 0.007 / 0.672 ± 0.015 | 0.892 (0.861) | 1.83 km | +2.5 / +1.1 / −0.3 / −1.0 |
+
+Interpretation:
+1. **The geo-referencing correction is the largest single improvement of the project**: `ref` AP @ 5 km 0.60 (uncorrected 0.35–0.38), well above the corrected baseline (0.45); non-isolated recall 0.85 vs. 0.75 for the baseline.
+2. **Training is now stable**: seed spread at 5 km ±0.016 (before ±0.03–0.06), best vs. last5 0.604 vs. 0.597 (before 0.346 vs. 0.309). Much of the earlier epoch-to-epoch instability came from the inconsistent labels (shifted before 2018, not after).
+3. **`noflip` lost almost all of its advantage** (+0.03 instead of +0.27 at 5 km, none at 10 km) — confirms 6.11. The remainder fits the small, stable southward offset (~0.2 px) present in both periods (fire behaviour or ICNF positioning); learning it would be legitimate.
+4. **`sigma05`'s earlier gain was an artefact of the offset**; no effect on corrected data → keep σ = 1 px.
+5. **The clustering adds nothing** (`births_plus` slightly worse, more variable): the model extracts from the raw input what the hand-made clustering provides (supports 4.0).
+6. **`neg2` is the only consistent gain** (+0.014–0.018 on all four measures, significant at 10 km, t ≈ 2.7); cost 1.5× training time; part of the gain may be more crops per epoch.
+
+**Status of the earlier ablations:** all uncorrected results (6.8–6.10, 6.11 table) are superseded for anything location-sensitive; their conclusions on σ and flips have reversed. They remain as documentation of the uncorrected setting.
+
+Next: combination run `neg2` (+ optionally `noflip`) as candidate final configuration; on corrected data still open: `layers1`, `hidden16` (also 1.7× faster if accuracy holds), `readout_max`, `cnn3d`, `presence_only`, `hist0`; then fix the configuration, retrain on 2004–2016, single test evaluation.

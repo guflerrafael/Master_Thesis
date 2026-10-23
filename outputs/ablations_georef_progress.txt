@@ -1,2 +1,31 @@
 15 runs (5 experiments × 3 seeds) -> models/ablations_georef/, outputs/ablations_georef/
 [1/15] ablations_georef/ref_s0: reference = v1 (hourly) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/ref_s0 --seed 0
+    ok in 32.7 min (total 33 min)
+[2/15] ablations_georef/ref_s1: reference = v1 (hourly) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/ref_s1 --seed 1
+    ok in 32.6 min (total 65 min)
+[3/15] ablations_georef/ref_s2: reference = v1 (hourly) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/ref_s2 --seed 2
+    ok in 32.9 min (total 98 min)
+[4/15] ablations_georef/noflip_s0: no flip augmentation | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/noflip_s0 --seed 0 --no-flip
+    ok in 32.5 min (total 131 min)
+[5/15] ablations_georef/noflip_s1: no flip augmentation | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/noflip_s1 --seed 1 --no-flip
+    ok in 32.7 min (total 163 min)
+[6/15] ablations_georef/noflip_s2: no flip augmentation | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/noflip_s2 --seed 2 --no-flip
+    ok in 33.0 min (total 196 min)
+[7/15] ablations_georef/sigma05_s0: narrower targets (sigma 0.5 px) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/sigma05_s0 --seed 0 --sigma 0.5
+    ok in 32.6 min (total 229 min)
+[8/15] ablations_georef/sigma05_s1: narrower targets (sigma 0.5 px) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/sigma05_s1 --seed 1 --sigma 0.5
+    ok in 32.2 min (total 261 min)
+[9/15] ablations_georef/sigma05_s2: narrower targets (sigma 0.5 px) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/sigma05_s2 --seed 2 --sigma 0.5
+    ok in 32.3 min (total 293 min)
+[10/15] ablations_georef/neg2_s0: 2 hard negatives per positive | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/neg2_s0 --seed 0 --neg-ratio 2
+    ok in 45.0 min (total 338 min)
+[11/15] ablations_georef/neg2_s1: 2 hard negatives per positive | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/neg2_s1 --seed 1 --neg-ratio 2
+    ok in 44.7 min (total 383 min)
+[12/15] ablations_georef/neg2_s2: 2 hard negatives per positive | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/neg2_s2 --seed 2 --neg-ratio 2
+    ok in 44.4 min (total 428 min)
+[13/15] ablations_georef/births_plus_s0: raw input + clustering (nucleus births) channel | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/births_plus_s0 --seed 0 --channels frp,confidence,detected,period,time,pt,persistent,births
+    ok in 32.4 min (total 460 min)
+[14/15] ablations_georef/births_plus_s1: raw input + clustering (nucleus births) channel | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/births_plus_s1 --seed 1 --channels frp,confidence,detected,period,time,pt,persistent,births
+    ok in 32.1 min (total 492 min)
+[15/15] ablations_georef/births_plus_s2: raw input + clustering (nucleus births) channel | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/births_plus_s2 --seed 2 --channels frp,confidence,detected,period,time,pt,persistent,births
+    ok in 32.3 min (total 524 min)

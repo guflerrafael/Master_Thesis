@@ -62,6 +62,8 @@ EXPERIMENTS = {
     "ignore4":          (3, "--ignore-r 4", "ignore radius 4 px in training"),
     "target100":        (3, "--min-target-ha 100", "targets >= 100 ha only"),
     "noflip":           (3, "--no-flip", "no flip augmentation"),
+    # ---- combinations (candidate final configurations, corrected data, notes.md 6.13)
+    "neg2_noflip":      (4, "--neg-ratio 2 --no-flip", "2 hard negatives per positive + no flips"),
 }
 SMOKE = "--epochs 1 --max-batches 3 --val-periods 10"
 
