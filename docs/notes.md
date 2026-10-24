@@ -1022,3 +1022,32 @@ Interpretation:
 **Status of the earlier ablations:** all uncorrected results (6.8–6.10, 6.11 table) are superseded for anything location-sensitive; their conclusions on σ and flips have reversed. They remain as documentation of the uncorrected setting.
 
 Next: combination run `neg2` (+ optionally `noflip`) as candidate final configuration; on corrected data still open: `layers1`, `hidden16` (also 1.7× faster if accuracy holds), `readout_max`, `cnn3d`, `presence_only`, `hist0`; then fix the configuration, retrain on 2004–2016, single test evaluation.
+
+### 6.14 Remaining ablations on the corrected data (2026-10-24)
+
+Local (M1), `--folder ablations_georef`, 3 seeds each; summary `outputs/ablations_georef/summary_georef2.md` (36 runs, all with the corrected build). t = rough Welch t vs. `ref` (AP5 best / AP5 last5 / AP10 best / AP10 last5).
+
+| Experiment | Change | AP @ 5 km best / last5 | AP @ 10 km best / last5 | Recall @ 10 km non-isol. | min/epoch | t |
+|---|---|---|---|---|---|---|
+| `ref` | — | 0.604 / 0.597 | 0.687 / 0.681 | 0.853 | 1.25 | |
+| `cnn3d` | 3D CNN, no recurrence | 0.628 / 0.617 | 0.700 / 0.691 | 0.868 | 1.19 | +2.4 / +2.3 / +4.9 / +1.6 |
+| `hidden16` | 16 instead of 32 channels | 0.619 / 0.612 | 0.699 / 0.696 | 0.859 | 0.79 | +1.3 / +1.5 / +3.4 / +3.1 |
+| `layers1` | 1 ConvLSTM layer | 0.611 / 0.604 | 0.691 / 0.689 | 0.857 | 0.81 | +0.6 / +0.7 / +0.5 / +1.0 |
+| `readout_max` | head on max over time | 0.609 / 0.602 | 0.702 / 0.696 | 0.861 | 1.30 | +0.5 / +0.5 / +3.2 / +2.5 |
+| `neg2` | 2 hard negatives / positive | 0.618 / 0.614 | 0.705 / 0.699 | 0.859 | 1.86 | +1.3 / +1.7 / +2.8 / +2.6 |
+| `neg2_noflip` | + no flips | 0.631 / 0.596 | 0.692 / 0.664 | 0.846 | 1.85 | +2.7 / −0.1 / +2.4 / −2.3 (vs. `neg2`: +2.0 / −1.2 / −2.0 / −4.3) |
+| `presence_only` | detections only (no FRP, no confidence) | 0.595 / 0.590 | 0.679 / 0.676 | 0.857 | 1.14 | −0.8 / −0.7 / −3.4 / −1.1 |
+| `hist0` | no 6 h history | 0.584 / 0.578 | 0.668 / 0.665 | 0.859 | 0.89 | −2.0 / −1.7 / −1.8 / −1.8 |
+| `births_plus`, `sigma05`, `noflip` | see 6.13 | | | | | |
+
+Findings:
+1. **All design variants lie within ~±0.03 AP of `ref`**: the model is robust to architecture choices; the label correction (6.12) mattered far more than any setting.
+2. **The recurrent memory is not needed:** the non-recurrent `cnn3d` is at least as good as the ConvLSTM (slightly better on all four measures) at the same training time. What makes the model work is seeing the space–time window, not the ConvLSTM memory. Supports trying the planned Transformer (direct access to all time steps).
+3. **Smaller is better or equal:** `hidden16` (+0.012–0.015, significant at 10 km, 1.6× faster) and `layers1` (equal, 1.5× faster) — the 2 × 32 model was over-sized for ~2,000 targets.
+4. **`readout_max` helps at 10 km** (+0.015), not at 5 km: the final-state readout loses some information.
+5. **`neg2` confirmed** (+0.014–0.018). **Combining with `noflip` is worse** (less stable, AP @ 10 km last5 −0.035 vs. `neg2`) → keep flips.
+6. **FRP intensity adds little:** detections only (`presence_only`) is only ~0.01 lower; the pattern of where and when fires are detected carries most of the information (thesis question on FRP).
+7. **The history helps a little:** without it (`hist0`) ~0.02 lower on all measures.
+- Caveat: 12 comparisons with 3 seeds, effects 0.01–0.02; single t ≈ 2 values can occur by chance. Consistent patterns (cnn3d, hidden16, neg2, readout_max, hist0) are more reliable than single numbers.
+
+Next (proposed): two candidate final configurations, 3 seeds each — `conv_final` (ConvLSTM, `--hidden 16 --neg-ratio 2 --readout max`) and `cnn3d_final` (`--arch cnn3d --neg-ratio 2`); choose on validation, retrain on 2004–2016, single test evaluation 2017–2019.

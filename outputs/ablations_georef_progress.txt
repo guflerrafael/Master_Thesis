@@ -29,3 +29,46 @@
     ok in 32.1 min (total 492 min)
 [15/15] ablations_georef/births_plus_s2: raw input + clustering (nucleus births) channel | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/births_plus_s2 --seed 2 --channels frp,confidence,detected,period,time,pt,persistent,births
     ok in 32.3 min (total 524 min)
+21 runs (7 experiments × 3 seeds) -> models/ablations_georef/, outputs/ablations_georef/
+[1/21] ablations_georef/neg2_noflip_s0: 2 hard negatives per positive + no flips | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/neg2_noflip_s0 --seed 0 --neg-ratio 2 --no-flip
+    ok in 44.8 min (total 45 min)
+[2/21] ablations_georef/neg2_noflip_s1: 2 hard negatives per positive + no flips | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/neg2_noflip_s1 --seed 1 --neg-ratio 2 --no-flip
+    ok in 44.6 min (total 89 min)
+[3/21] ablations_georef/neg2_noflip_s2: 2 hard negatives per positive + no flips | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/neg2_noflip_s2 --seed 2 --neg-ratio 2 --no-flip
+    ok in 44.3 min (total 134 min)
+[4/21] ablations_georef/layers1_s0: 1 ConvLSTM layer | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/layers1_s0 --seed 0 --layers 1
+    ok in 20.5 min (total 154 min)
+[5/21] ablations_georef/layers1_s1: 1 ConvLSTM layer | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/layers1_s1 --seed 1 --layers 1
+    ok in 20.5 min (total 175 min)
+[6/21] ablations_georef/layers1_s2: 1 ConvLSTM layer | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/layers1_s2 --seed 2 --layers 1
+    ok in 20.4 min (total 195 min)
+[7/21] ablations_georef/hidden16_s0: 16 hidden channels | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hidden16_s0 --seed 0 --hidden 16
+    ok in 20.0 min (total 215 min)
+[8/21] ablations_georef/hidden16_s1: 16 hidden channels | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hidden16_s1 --seed 1 --hidden 16
+    ok in 20.0 min (total 235 min)
+[9/21] ablations_georef/hidden16_s2: 16 hidden channels | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hidden16_s2 --seed 2 --hidden 16
+    ok in 20.1 min (total 255 min)
+[10/21] ablations_georef/readout_max_s0: head on max over time | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/readout_max_s0 --seed 0 --readout max
+    ok in 33.9 min (total 289 min)
+[11/21] ablations_georef/readout_max_s1: head on max over time | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/readout_max_s1 --seed 1 --readout max
+    ok in 34.4 min (total 323 min)
+[12/21] ablations_georef/readout_max_s2: head on max over time | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/readout_max_s2 --seed 2 --readout max
+    ok in 33.7 min (total 357 min)
+[13/21] ablations_georef/cnn3d_s0: no recurrence: 3D CNN | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/cnn3d_s0 --seed 0 --arch cnn3d
+    ok in 40.7 min (total 398 min)
+[14/21] ablations_georef/cnn3d_s1: no recurrence: 3D CNN | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/cnn3d_s1 --seed 1 --arch cnn3d
+    ok in 40.7 min (total 438 min)
+[15/21] ablations_georef/cnn3d_s2: no recurrence: 3D CNN | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/cnn3d_s2 --seed 2 --arch cnn3d
+    ok in 40.6 min (total 479 min)
+[16/21] ablations_georef/presence_only_s0: detections only (no FRP, no confidence) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/presence_only_s0 --seed 0 --channels detected,period,time,pt,persistent
+    ok in 30.2 min (total 509 min)
+[17/21] ablations_georef/presence_only_s1: detections only (no FRP, no confidence) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/presence_only_s1 --seed 1 --channels detected,period,time,pt,persistent
+    ok in 30.4 min (total 540 min)
+[18/21] ablations_georef/presence_only_s2: detections only (no FRP, no confidence) | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/presence_only_s2 --seed 2 --channels detected,period,time,pt,persistent
+    ok in 30.2 min (total 570 min)
+[19/21] ablations_georef/hist0_s0: no history before the period | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hist0_s0 --seed 0 --history-h 0
+    ok in 23.5 min (total 593 min)
+[20/21] ablations_georef/hist0_s1: no history before the period | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hist0_s1 --seed 1 --history-h 0
+    ok in 23.7 min (total 617 min)
+[21/21] ablations_georef/hist0_s2: no history before the period | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hist0_s2 --seed 2 --history-h 0
+    ok in 23.7 min (total 641 min)
