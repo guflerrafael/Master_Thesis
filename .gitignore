@@ -13,3 +13,6 @@ documents/
 models/ablations_smoke/
 outputs/ablations_smoke/
 figures/ablations_smoke/
+models/final_smoke/
+outputs/final_smoke/
+figures/final_smoke/

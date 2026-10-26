@@ -72,3 +72,16 @@
     ok in 23.7 min (total 617 min)
 [21/21] ablations_georef/hist0_s2: no history before the period | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/hist0_s2 --seed 2 --history-h 0
     ok in 23.7 min (total 641 min)
+6 runs (2 experiments × 3 seeds) -> models/ablations_georef/, outputs/ablations_georef/
+[1/6] ablations_georef/conv_final_s0: ConvLSTM candidate: 16 ch + 2 negatives + max readout | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/conv_final_s0 --seed 0 --hidden 16 --neg-ratio 2 --readout max
+    ok in 28.2 min (total 28 min)
+[2/6] ablations_georef/conv_final_s1: ConvLSTM candidate: 16 ch + 2 negatives + max readout | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/conv_final_s1 --seed 1 --hidden 16 --neg-ratio 2 --readout max
+    ok in 29.2 min (total 57 min)
+[3/6] ablations_georef/conv_final_s2: ConvLSTM candidate: 16 ch + 2 negatives + max readout | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/conv_final_s2 --seed 2 --hidden 16 --neg-ratio 2 --readout max
+    ok in 29.4 min (total 87 min)
+[4/6] ablations_georef/cnn3d_final_s0: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/cnn3d_final_s0 --seed 0 --arch cnn3d --neg-ratio 2
+    ok in 53.1 min (total 140 min)
+[5/6] ablations_georef/cnn3d_final_s1: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/cnn3d_final_s1 --seed 1 --arch cnn3d --neg-ratio 2
+    ok in 53.5 min (total 193 min)
+[6/6] ablations_georef/cnn3d_final_s2: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_georef/cnn3d_final_s2 --seed 2 --arch cnn3d --neg-ratio 2
+    ok in 54.7 min (total 248 min)

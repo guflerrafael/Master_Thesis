@@ -14,6 +14,9 @@ Time resolution: --step-agg sets how many 15-min slots form one model step
 (4 = hourly, 24 steps, v1; 1 = native 15 min, 96 steps, v2). Each step is the maximum over
 its slots. 15-min steps make training ~4x slower and use ~4x more activation memory.
 
+Final models (notes.md 6.16): --train-splits train,val --no-val trains on 2004-2016 without
+validation and saves the last epoch; the test split can never be used for training.
+
 Run from the repository root:
   .venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt
   .venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt
@@ -108,10 +111,11 @@ def static_crop(data, crop=None):
 
 
 class CropSet(torch.utils.data.Dataset):
-    def __init__(self, data, split, cfg, jitter=8, seed=0):
+    def __init__(self, data, splits, cfg, jitter=8, seed=0):
         self.data, self.cfg, self.size, self.jitter = data, cfg, cfg["crop"], jitter
         self.rng = np.random.default_rng(seed)
-        per = data.periods[data.periods["split"] == split]
+        splits = [splits] if isinstance(splits, str) else list(splits)
+        per = data.periods[data.periods["split"].isin(splits)]
         pos = data.labels[(data.labels["role"] == "target") & data.labels["period"].isin(per["period"])]
         if cfg["min_target_ha"]:
             pos = pos[pos["fire_id"].map(data._area) >= cfg["min_target_ha"]]
@@ -248,6 +252,9 @@ def parse_args(argv=None):
     ap.add_argument("--workers", type=int, default=0, help="DataLoader worker processes (Colab: 2)")
     ap.add_argument("--val-batch", type=int, default=16, help="validation periods per model call")
     ap.add_argument("--val-amp", action="store_true", help="half-precision validation on CUDA (faster, not bit-identical)")
+    ap.add_argument("--train-splits", default="train", help="comma list of splits to train on (final models: train,val)")
+    ap.add_argument("--no-val", action="store_true",
+                    help="no validation; the checkpoint of the last epoch is saved (final models trained on train+val)")
     # input
     ap.add_argument("--step-agg", type=int, default=DEFAULTS["step_agg"], help="15-min slots per model step (4 = hourly)")
     ap.add_argument("--channels", default=",".join(DEFAULT_CHANNELS), help=f"comma list from {','.join(ALL_CHANNELS)}")
@@ -281,7 +288,10 @@ def main():
     torch.manual_seed(args.seed); np.random.seed(args.seed)
     device = get_device()
     data = FireData()
-    train = CropSet(data, "train", cfg, seed=args.seed)
+    train_splits = [x.strip() for x in args.train_splits.split(",") if x.strip()]
+    assert "test" not in train_splits, "never train on the test split"
+    assert args.no_val or "val" not in train_splits, "training on 'val' requires --no-val (no validation data left)"
+    train = CropSet(data, train_splits, cfg, seed=args.seed)
     val_periods = data.periods.loc[(data.periods["split"] == "val") & (data.periods["n_det"] > 0), "period"]
     if args.val_periods:
         val_periods = val_periods.sample(args.val_periods, random_state=0)
@@ -314,7 +324,12 @@ def main():
             opt.step(); losses.append(loss.item())
         sched.step()
         rec = {"epoch": epoch, "train_loss": float(np.mean(losses)), "train_min": (time.time() - t0) / 60}
-        if epoch % args.val_every == 0 or epoch == args.epochs:
+        if args.no_val:
+            if epoch == args.epochs:                                   # last epoch = final model
+                torch.save({"state_dict": model.state_dict(), "config": {**vars(args), **cfg}, "epoch": epoch, "val": {}},
+                           ck_path)
+                rec["saved"] = True
+        elif epoch % args.val_every == 0 or epoch == args.epochs:
             t1 = time.time()
             preds = predict(model, data, val_periods, cfg, device, batch=args.val_batch, amp=args.val_amp)
             for k in (5, 10):

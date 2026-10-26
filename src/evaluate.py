@@ -73,8 +73,10 @@ def average_precision(scored, n_targets):
     return ap, recall, precision, s["score"].values
 
 
-def evaluate(preds, data, split, k_km, groups=("isolated", "size_class")):
-    periods = data.periods.loc[data.periods["split"] == split, "period"]
+def evaluate(preds, data, split, k_km, groups=("isolated", "size_class"), periods=None):
+    """periods: optional subset of the split's periods (e.g. one year); default all periods."""
+    all_p = data.periods.loc[data.periods["split"] == split, "period"]
+    periods = all_p if periods is None else all_p[all_p.isin(set(periods))]
     scored, targets = match(preds, data, set(periods), k_km)
     n = len(targets)
     ap, rec, prec, thr = average_precision(scored, n)

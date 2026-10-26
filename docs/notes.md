@@ -1051,3 +1051,48 @@ Findings:
 - Caveat: 12 comparisons with 3 seeds, effects 0.01–0.02; single t ≈ 2 values can occur by chance. Consistent patterns (cnn3d, hidden16, neg2, readout_max, hist0) are more reliable than single numbers.
 
 Next (proposed): two candidate final configurations, 3 seeds each — `conv_final` (ConvLSTM, `--hidden 16 --neg-ratio 2 --readout max`) and `cnn3d_final` (`--arch cnn3d --neg-ratio 2`); choose on validation, retrain on 2004–2016, single test evaluation 2017–2019.
+
+### 6.15 Final candidate configurations (2026-10-24)
+
+Local (M1), corrected build, 3 seeds each; summary `outputs/ablations_georef/summary_georef3_final_candidates.md`. (`conv_final_l1` — one layer × 16 channels — was discussed but not run.)
+
+| Validation 2015–2016 | AP @ 5 km best / last5 | AP @ 10 km best / last5 | Recall @ 10 km (non-isol.) | Median error @ 5 km | min/epoch |
+|---|---|---|---|---|---|
+| baseline (nucleus birth) | 0.448 | 0.577 | 0.804 (0.753) | 2.19 km | — |
+| `ref` | 0.604 / 0.597 | 0.687 / 0.681 | 0.887 (0.853) | 2.08 km | 1.25 |
+| `hidden16` | 0.619 / 0.612 | 0.699 / 0.696 | 0.891 (0.859) | 2.11 km | 0.79 |
+| `neg2` | 0.618 / 0.614 | 0.705 / 0.699 | 0.891 (0.859) | 2.09 km | 1.86 |
+| `cnn3d` | 0.628 / 0.617 | 0.700 / 0.691 | 0.898 (0.868) | 2.05 km | 1.19 |
+| `conv_final` (ConvLSTM, 16 ch, 2 neg., max readout) | 0.613 ± 0.017 / 0.609 ± 0.016 | 0.696 ± 0.016 / 0.692 ± 0.017 | 0.888 (0.855) | 2.03 km | 1.23 |
+| **`cnn3d_final`** (3D CNN, 2 neg.) | **0.635 ± 0.008 / 0.621 ± 0.009** | **0.704 ± 0.001 / 0.696 ± 0.008** | **0.897 (0.867)** | 2.06 km | 1.81 |
+
+Rough Welch t (AP5 best / AP5 last5 / AP10 best / AP10 last5): `cnn3d_final` vs. `ref` +2.9 / +2.4 / +8.4 / +2.4; `cnn3d_final` vs. `conv_final` +2.0 / +1.1 / +0.8 / +0.4; `cnn3d_final` vs. `cnn3d` +1.4 / +0.6 / +2.1 / +0.8; `conv_final` vs. `hidden16` −0.5 / −0.2 / −0.2 / −0.4; vs. `neg2` −0.5 / −0.4 / −0.8 / −0.6.
+
+Findings:
+1. **The single ConvLSTM gains do not add up**: `conv_final` is not better than `hidden16` or `neg2` alone — consistent with the models being close to what the labels allow (each change ~+0.01–0.015, no stacking).
+2. **`cnn3d_final` is the best configuration**: clearly above `ref` (highly significant at 10 km), +0.02 above the ConvLSTM candidate at 5 km (t ≈ 2); compared with plain `cnn3d` the hard negatives add little (+0.004–0.007) at 1.5× training time.
+3. All good variants are within ~0.01 at 10 km; the baseline is beaten everywhere (+0.19 AP @ 5 km, +0.13 @ 10 km).
+
+Proposed final evaluation: `cnn3d_final` (main model) and `conv_final` (ConvLSTM of the proposal), each retrained on 2004–2016 (3 seeds, last epoch — best and last epoch barely differ since the correction), evaluated once on 2017–2019 together with the baseline; breakdowns by isolation, size class and year (2017 extreme; 2018–2019 after the SEVIRI geo-referencing change). Needs `train.py --train-splits train,val --no-val` and a test-evaluation script.
+
+### 6.16 Model review, inference-only experiments and error analysis (2026-10-24)
+
+Full write-up: `docs/model_review.md` (review of all corrected-data ablations, literature scan 2023–2026, pre-/post-processing suggestions, proposed order of work). Validation only; numbers from scratch scripts on the saved `models/ablations_georef/` checkpoints (no retraining); not yet part of `src/`.
+- **Post-processing** (`cnn3d_final`, 3 seeds): 3-seed ensemble of probability maps 0.640 / 0.714 AP @ 5 / 10 km (single models 0.634 / 0.703); + log-parabola sub-pixel decoding (separable DARK) **0.655 / 0.713, median error @ 5 km 1.89 km** (3×3 centroid 2.00 km). Flip TTA: fewer false alarms, no AP gain; mixed CNN + ConvLSTM ensemble: no gain.
+- **Misses:** targets with another target ≤ 2 px in the same period (52 of 403) have recall 0.44 @ 10 km vs. 0.97 for the rest (~70 % of all misses). Such pairs (196 in 2004–2019) are separate records, median 4.2 km and 1.7 h apart → motivates a space–time (t, i, j) ignition output. Model vs. baseline recall @ 10 km for targets next to active fires (6 h history): 0.75 vs. 0.31.
+- **False alarms** at the best-F1 threshold @ 10 km (76): 30 % near an ICNF fire < 10 ha of the same period, 28 % near a ≥ 10 ha fire started 1–72 h before; 2,163 seen 10–50 ha training fires are currently ignore regions.
+- **Calibration:** peak probabilities rank well but are not calibrated (0.5–0.6 → 68 % hits, 0.6–0.8 → 92 %).
+- **Localisation floor:** nearest detected pixel centre is a median 1.63 km from the ICNF point (pure pixel quantisation 1.51 km); the model reaches 1.89 km.
+- **Data:** 105 whole-domain empty slots between slots with ≥ 10 detections on busy summer days (missing scans/files). Residual north–south label offset (~0.2 px) is larger in mountain districts (Guarda 0.28 px) than in lowlands (Beja 0.14) → hypothesis: uncorrected terrain parallax (h · tan VZA, VZA ≈ 47°); to test with a DEM.
+
+### 6.16 Final training and test evaluation: implementation (2026-10-26, not yet run)
+
+Code:
+- `src/train.py`: `--train-splits` (comma list, default `train`) and `--no-val` (no validation; the checkpoint of the last epoch is saved). Guards: training on `test` is impossible; training on `val` requires `--no-val`. Justification for the last epoch: on the corrected data best-epoch and last-five means barely differ (e.g. `cnn3d_final` AP@5 0.635 vs. 0.621, AP@10 0.704 vs. 0.696).
+- `src/evaluate.py`: `evaluate(..., periods=...)` scores a subset of a split's periods (used for AP per year).
+- `src/evaluate_test.py`: evaluates all final checkpoints (`models/final/<experiment>_s<seed>.pt`) and the nucleus-birth baseline at 5 and 10 km — per seed and mean ± std over seeds; recall by isolation, size class and year; AP per year (2017 extreme year before the SEVIRI geo-referencing change, 2018–2019 after). **Safeguard: the test split is only used with `--confirm-test`**; without it the script evaluates the validation split (code check without test numbers). Outputs `outputs/final/<split>_results_{per_seed,summary}.csv`, `<split>_results.md`, `figures/final/<split>_pr.png`.
+- Smoke test (3 batches, validation split, files deleted): final-mode training uses 2,382 target crops (train 1,979 + val 403; 7,146 crops/epoch with 2 negatives); the val guard fires; the evaluation script reproduces the corrected baseline on validation (0.448 / 0.577).
+
+Commands (≈ 4–5 h locally for the 6 trainings):
+1. `caffeinate -i .venv/bin/python -u src/run_ablations.py --only cnn3d_final conv_final --seeds 0 1 2 --folder final --extra="--train-splits train,val --no-val" 2>&1 | tee outputs/final_progress.txt`
+2. once: `.venv/bin/python src/evaluate_test.py --confirm-test > outputs/final/test_log.txt`
