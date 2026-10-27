@@ -21,7 +21,7 @@ figures/baselines/ precision-recall curves of the baselines        (src/baseline
 figures/model/    model vs. baseline precision-recall curves      (src/evaluate_model.py)
 models/           trained checkpoints (*.pt)                      (src/train.py)
 src/               all code
-docs/              thesis.md (context), notes.md (this file), literature.md (literature review)
+docs/              thesis.md (context), notes.md (this file), literature.md (literature review), data_pipeline.md (current pipeline, technical reference), model_review.md
 ```
 
 Environment: Python 3.11, `python -m venv .venv && .venv/bin/pip install -r requirements.txt` (only packages imported by `src/`, pinned).
@@ -44,6 +44,8 @@ Run from the repository root, in this order:
 15. `.venv/bin/python src/plot_predictions.py --name convlstm_v1 > outputs/convlstm_v1_predictions_log.txt`: predicted vs. ICNF ignition maps (6.3)
 16. `.venv/bin/python src/train.py --name convlstm_v2_15min --step-agg 1 > outputs/convlstm_v2_15min_log.txt`, then `src/evaluate_model.py --name convlstm_v2_15min` and `src/plot_predictions.py --name convlstm_v2_15min`: 15-min model (6.5)
 17. `python src/run_ablations.py --tier 1 --seeds 0 1 2` (or `colab/ablations_colab.ipynb` on a Colab GPU), then `python src/summarize_ablations.py`: ablation study (6.7); `python src/peak_ablation.py --name convlstm_v1`: peak-extraction ablation
+18. `.venv/bin/python src/plot_pipeline_figures.py`: figures explaining labels, loss weights, time aggregation and the geo-referencing frames → `figures/pipeline/` (data-pipeline explainer doc, 2026-10-26)
+19. `.venv/bin/python src/plot_overview_diagrams.py`: overview figures of the data pipeline (`figures/pipeline/pipeline_overview.png/.pdf`) and one per model (`figures/model/model_convlstm.png/.pdf`, `model_cnn3d.png/.pdf`; use the checkpoints `ablations_georef/conv_final_s0` and `cnn3d_final_s0`)
 
 ## 1. Data
 
