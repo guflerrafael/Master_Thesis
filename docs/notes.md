@@ -46,6 +46,7 @@ Run from the repository root, in this order:
 17. `python src/run_ablations.py --tier 1 --seeds 0 1 2` (or `colab/ablations_colab.ipynb` on a Colab GPU), then `python src/summarize_ablations.py`: ablation study (6.7); `python src/peak_ablation.py --name convlstm_v1`: peak-extraction ablation
 18. `.venv/bin/python src/plot_pipeline_figures.py`: figures explaining labels, loss weights, time aggregation and the geo-referencing frames → `figures/pipeline/` (data-pipeline explainer doc, 2026-10-26)
 19. `.venv/bin/python src/plot_overview_diagrams.py`: overview figures of the data pipeline (`figures/pipeline/pipeline_overview.png/.pdf`) and one per model (`figures/model/model_convlstm.png/.pdf`, `model_cnn3d.png/.pdf`; use the checkpoints `ablations_georef/conv_final_s0` and `cnn3d_final_s0`)
+20. `.venv/bin/python src/plot_test_examples.py --name final/cnn3d_final_s0`: predicted vs. ICNF ignition maps of the final model on the test split, cases chosen by fixed rules (6.18)
 
 ## 1. Data
 
@@ -1133,3 +1134,26 @@ Findings:
 5. **Localisation per matched fire is not better than the first hotspot**: median error of matches ~2.0 km (models) vs. 1.9 km (baseline), but the models match more fires within 5 km (89 % vs. 81 %) and rank them better. The gain is in finding and ranking the right ignitions, not in sub-pixel precision for fires the baseline already finds — the ~2 km level looks like a floor set by pixel size and ICNF position accuracy.
 6. **The geo-referencing correction generalises**: models trained almost entirely on pre-2018 (corrected) labels work very well after the SEVIRI change (2018: AP @ 5 km 0.85–0.86 vs. 0.71 baseline). 2017 (extreme year, many simultaneous fires) is the hardest year for all methods but shows the largest absolute gain (+0.13–0.14). 2019 shows the smallest gain (cnn3d +0.05 at 5 km, ConvLSTM ±0); per-year numbers rest on few targets (2018: ~35, 2019: ~90), so they are noisy.
 - Caveats: one test evaluation, 3 seeds; test years 2017–2019 only (2017 dominates); ICNF ignition positions are themselves uncertain.
+
+### 6.18 Prediction examples on test; input panel without ICNF (2026-10-29)
+
+Follow-up of the supervisor meeting (2026-10-28).
+- `figures/pipeline/sample_labels.png` (a): the ICNF target/ignore markers were removed from the **input** panel. They suggested that the labels are part of the input. They stay on the target and loss-weight panels.
+- `src/plot_test_examples.py`: input (hour of first SEVIRI detection, no ICNF), predicted probability with points by match status (hit / false alarm / near an ignore fire) and ICNF targets with the target heatmap, for `final/cnn3d_final_s0` on the test split. This is descriptive, made after the single test evaluation (6.17), and not used for any choice. Operating point: best F1 at 10 km on test (p ≥ 0.426; test AP @ 10 km 0.708 for seed 0). Cases are picked by fixed rules, random with seed 0 inside each type. Outputs: `figures/final/test_examples_{1,2}.png`, `outputs/final/test_examples.csv`.
+
+| Case | Period (UTC, + 12 h) | Targets | Hits | False alarms |
+|---|---|---|---|---|
+| outbreak (most targets) | 2017-10-15 06:00 | 32 | 16 | 3 |
+| hit (1 target, found) | 2017-08-08 06:00 | 1 | 1 | 1 |
+| miss (a target not found) | 2017-06-29 06:00 | 1 | 0 | 0 |
+| merged pair (≤ 10 km apart, one missed) | 2017-06-21 06:00 | 2 | 1 | 0 |
+| false alarm (no target) | 2017-04-20 06:00 | 0 | 0 | 1 |
+| random period with a target | 2019-07-24 06:00 | 3 | 3 | 0 |
+| random period with a target | 2018-08-04 06:00 | 3 | 3 | 0 |
+
+What the examples show:
+- **Outbreak:** many of the missed targets have a peak nearby that is below the threshold. The model often finds these fires but ranks them low when many fires burn at the same time. This fits the remaining "close ignitions" errors (model review).
+- **Miss:** the model puts a clear peak at the right place (p ≈ 0.3), just below the threshold. This is a ranking miss, not a blind spot.
+- **Merged pair:** two targets one cell apart produce one peak, which matches one of them. This is the case a space–time output (ignition time as a target) should separate.
+- **False alarm:** a detection on the Minho border river (Portugal–Spain), with no ICNF fire. It could be a fire on the Spanish side.
+

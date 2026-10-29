@@ -1,0 +1,8 @@
+case,period,n_targets,hits,misses,false_alarms,model,threshold
+outbreak (most targets),2017-10-15 06:00:00+00:00,32,16,16,3,cnn3d_final_s0,0.42556047439575195
+"hit (1 target, found)",2017-08-08 06:00:00+00:00,1,1,0,1,cnn3d_final_s0,0.42556047439575195
+miss (a target not found),2017-06-29 06:00:00+00:00,1,0,1,0,cnn3d_final_s0,0.42556047439575195
+"merged pair (≤ 10 km apart, one missed)",2017-06-21 06:00:00+00:00,2,1,1,0,cnn3d_final_s0,0.42556047439575195
+false alarm (no target),2017-04-20 06:00:00+00:00,0,0,0,1,cnn3d_final_s0,0.42556047439575195
+random period with a target,2019-07-24 06:00:00+00:00,3,3,0,0,cnn3d_final_s0,0.42556047439575195
+random period with a target,2018-08-04 06:00:00+00:00,3,3,0,0,cnn3d_final_s0,0.42556047439575195

@@ -1,6 +1,6 @@
 """Figures that explain the data pipeline (labels, loss weights, time aggregation, frames).
 
-  figures/pipeline/sample_labels.png   one validation period: input, target heatmap, loss weight
+  figures/pipeline/sample_labels.png   one validation period: input (SEVIRI only), target heatmap, loss weight
   figures/pipeline/time_aggregation.png  15-min detections of one target pixel vs. hourly maxima
   figures/pipeline/georef_frames.png   true vs. sensor-frame ignition and the first detections
 
@@ -57,6 +57,8 @@ def fig_sample(data, mainland):
     ax.axvspan(-0.5, -0.5, color="none")
     fig.colorbar(im, ax=ax, shrink=0.75, label="hour of first detection in the 24 h window\n(0–6 history, 6–18 period, 18–24 tail)")
     ax.set_title("(a) input: where and when SEVIRI detected fire")
+    ax.text(0.02, 0.02, "SEVIRI detections only, no ICNF information", transform=ax.transAxes,
+            fontsize=7.5, color=E.INK2, va="bottom")
     ax = axes[1]
     im = ax.imshow(y[sl], cmap=E.SEQ_ORANGE, vmin=0, vmax=1, interpolation="nearest")
     fig.colorbar(im, ax=ax, shrink=0.75, label="target heatmap y (Gaussian, σ = 1 px)")
@@ -64,9 +66,10 @@ def fig_sample(data, mainland):
     ax = axes[2]
     ax.imshow(w[sl], cmap="Greys_r", vmin=-0.4, vmax=1, interpolation="nearest")
     ax.set_title("(c) loss weight w: white = counted, dark = no loss")
-    for ax in axes:
+    for k, ax in enumerate(axes):
         _border(ax, mainland, i0, j0)
-        _labels(ax, lab, i0, j0, fires)
+        if k:   # ICNF fires only on the label panels: they are not part of the input
+            _labels(ax, lab, i0, j0, fires)
         ax.set_xlim(-0.5, j1 - j0 - 0.5); ax.set_ylim(i1 - i0 - 0.5, -0.5)
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
     h = [plt.Line2D([], [], ls="", **{k: v for k, v in dict(ROLE_STYLE["target"], markersize=9).items() if k not in ("s", "lw")}, mew=1.6, label="target (≥ 50 ha, seen)"),
