@@ -1,0 +1,13 @@
+6 runs (2 experiments × 3 seeds) -> models/final/, outputs/final/
+[1/6] final/cnn3d_final_s0: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final/cnn3d_final_s0 --seed 0 --arch cnn3d --neg-ratio 2 --train-splits train,val --no-val
+    ok in 43.4 min (total 43 min)
+[2/6] final/cnn3d_final_s1: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final/cnn3d_final_s1 --seed 1 --arch cnn3d --neg-ratio 2 --train-splits train,val --no-val
+    ok in 43.2 min (total 87 min)
+[3/6] final/cnn3d_final_s2: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final/cnn3d_final_s2 --seed 2 --arch cnn3d --neg-ratio 2 --train-splits train,val --no-val
+    ok in 42.9 min (total 129 min)
+[4/6] final/conv_final_s0: ConvLSTM candidate: 16 ch + 2 negatives + max readout | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final/conv_final_s0 --seed 0 --hidden 16 --neg-ratio 2 --readout max --train-splits train,val --no-val
+    ok in 28.9 min (total 158 min)
+[5/6] final/conv_final_s1: ConvLSTM candidate: 16 ch + 2 negatives + max readout | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final/conv_final_s1 --seed 1 --hidden 16 --neg-ratio 2 --readout max --train-splits train,val --no-val
+    ok in 29.1 min (total 187 min)
+[6/6] final/conv_final_s2: ConvLSTM candidate: 16 ch + 2 negatives + max readout | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final/conv_final_s2 --seed 2 --hidden 16 --neg-ratio 2 --readout max --train-splits train,val --no-val
+    ok in 29.1 min (total 217 min)

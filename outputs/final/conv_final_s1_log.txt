@@ -1,0 +1,22 @@
+device mps; parameters 45,009; train crops per epoch 7,146 (2,382 positive); validation periods 844; config {'step_agg': 4, 'channels': ['frp', 'confidence', 'detected', 'period', 'time', 'pt', 'persistent'], 'history_h': 6, 'tail_h': 6, 'arch': 'convlstm', 'layers': 2, 'hidden': 16, 'kernel': 3, 'readout': 'max', 'crop': 32, 'sigma': 1.0, 'ignore_r': 2.0, 'min_target_ha': None, 'loss': 'focal', 'neg_ratio': 2.0, 'flip': True, 'name': 'final/conv_final_s1', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 1, 'workers': 0, 'val_batch': 16, 'val_amp': False, 'train_splits': 'train,val', 'no_val': True, 'no_flip': False}
+{"epoch": 1, "train_loss": 1.988, "train_min": 1.4556}
+{"epoch": 2, "train_loss": 0.7945, "train_min": 1.4587}
+{"epoch": 3, "train_loss": 0.7552, "train_min": 1.4532}
+{"epoch": 4, "train_loss": 0.7285, "train_min": 1.4498}
+{"epoch": 5, "train_loss": 0.724, "train_min": 1.4525}
+{"epoch": 6, "train_loss": 0.7015, "train_min": 1.4508}
+{"epoch": 7, "train_loss": 0.7063, "train_min": 1.452}
+{"epoch": 8, "train_loss": 0.714, "train_min": 1.4511}
+{"epoch": 9, "train_loss": 0.6783, "train_min": 1.4531}
+{"epoch": 10, "train_loss": 0.6935, "train_min": 1.4521}
+{"epoch": 11, "train_loss": 0.6695, "train_min": 1.4528}
+{"epoch": 12, "train_loss": 0.6624, "train_min": 1.4512}
+{"epoch": 13, "train_loss": 0.6618, "train_min": 1.4536}
+{"epoch": 14, "train_loss": 0.6512, "train_min": 1.4523}
+{"epoch": 15, "train_loss": 0.6529, "train_min": 1.453}
+{"epoch": 16, "train_loss": 0.6454, "train_min": 1.4541}
+{"epoch": 17, "train_loss": 0.6297, "train_min": 1.4514}
+{"epoch": 18, "train_loss": 0.6394, "train_min": 1.4537}
+{"epoch": 19, "train_loss": 0.6352, "train_min": 1.4527}
+{"epoch": 20, "train_loss": 0.636, "train_min": 1.4538, "saved": true}
+best mean AP (val) -1.0000; checkpoint models/final/conv_final_s1.pt

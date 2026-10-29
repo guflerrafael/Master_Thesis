@@ -1098,3 +1098,38 @@ Code:
 Commands (≈ 4–5 h locally for the 6 trainings):
 1. `caffeinate -i .venv/bin/python -u src/run_ablations.py --only cnn3d_final conv_final --seeds 0 1 2 --folder final --extra="--train-splits train,val --no-val" 2>&1 | tee outputs/final_progress.txt`
 2. once: `.venv/bin/python src/evaluate_test.py --confirm-test > outputs/final/test_log.txt`
+
+### 6.17 Final test results 2017–2019 (2026-10-27)
+
+Final models trained on 2004–2016 (train + val), 20 epochs, last epoch, 3 seeds each (`models/final/`, all converged; cnn3d ~2.15 min/epoch, ConvLSTM ~1.45 min/epoch with 2 hard negatives); evaluated **once** on the test split with `src/evaluate_test.py --confirm-test` (corrected build). Outputs: `outputs/final/test_results.md`, `test_results_{per_seed,summary}.csv`, `test_log.txt`; figure `figures/final/test_pr.png`. Mean ± std over seeds (baseline deterministic).
+
+| Test 2017–2019 | AP @ 5 km | AP @ 10 km | Recall @ 10 km (all preds) | Best F1 @ 10 km (P / R) | False alarms/day @ best F1 (10 km) | Nearest pred ≤ 5 km | Median error of matches @ 5 km |
+|---|---|---|---|---|---|---|---|
+| baseline (nucleus birth) | 0.501 | 0.593 | 0.856 | 0.649 (0.639 / 0.661) | 0.150 | 0.813 | 1.86 km |
+| **cnn3d_final** | **0.623 ± 0.012** | **0.711 ± 0.004** | **0.938 ± 0.004** | 0.693 (0.719 / 0.669) | 0.105 | **0.891** | 1.96 km |
+| **conv_final** (ConvLSTM) | **0.620 ± 0.013** | **0.714 ± 0.013** | 0.933 ± 0.008 | 0.688 (0.745 / 0.640) | 0.088 | 0.888 | 2.00 km |
+
+Recall (all predictions) by subgroup, 5 / 10 km:
+
+| | non-isolated | isolated | 50–100 ha | 100–500 ha | 500–1k ha | ≥ 1k ha |
+|---|---|---|---|---|---|---|
+| baseline | 0.734 / 0.810 | 0.903 / 0.963 | 0.787 / 0.853 | 0.811 / 0.876 | 0.750 / 0.864 | 0.733 / 0.800 |
+| cnn3d_final | 0.833 / 0.911 | 0.945 / 1.000 | 0.907 / 0.953 | 0.843 / 0.924 | 0.871 / 0.970 | 0.839 / 0.922 |
+| conv_final | 0.826 / 0.904 | 0.953 / 1.000 | 0.902 / 0.949 | 0.843 / 0.919 | 0.894 / 0.962 | 0.817 / 0.917 |
+
+AP by year, 5 / 10 km (2017 before, 2018–2019 after the SEVIRI geo-referencing change):
+
+| | 2017 | 2018 | 2019 |
+|---|---|---|---|
+| baseline | 0.454 / 0.551 | 0.711 / 0.774 | 0.680 / 0.747 |
+| cnn3d_final | 0.583 / 0.683 | 0.848 / 0.849 | 0.729 / 0.797 |
+| conv_final | 0.591 / 0.693 | 0.859 / 0.859 | 0.680 / 0.771 |
+
+Findings:
+1. **Both models clearly beat the baseline on unseen years**: AP +0.12 at 5 km and +0.12 at 10 km; recall @ 10 km 0.94 vs. 0.86; fewer false alarms at the best-F1 operating point (~0.1 vs. 0.15 per day). The curves lie above the baseline at all recall levels.
+2. **Results generalise from validation to test**: cnn3d_final 0.635 / 0.704 (val) vs. 0.623 / 0.711 (test) — no sign that the model choices overfitted the validation years.
+3. **The 3D CNN and the ConvLSTM are equivalent on test** (0.623 vs. 0.620 at 5 km, 0.711 vs. 0.714 at 10 km; differences far below the seed spread). The +0.02 advantage of the 3D CNN at 5 km on validation does not replicate. Conclusion for the thesis: the recurrent memory brings no advantage, but no disadvantage either; both architectures reach the same level.
+4. **Largest gains where the hand-made approach is weakest**: fires with neighbours (recall @ 5 km 0.83 vs. 0.73, +10 points) and large fires ≥ 1,000 ha (+10–12 points).
+5. **Localisation per matched fire is not better than the first hotspot**: median error of matches ~2.0 km (models) vs. 1.9 km (baseline), but the models match more fires within 5 km (89 % vs. 81 %) and rank them better. The gain is in finding and ranking the right ignitions, not in sub-pixel precision for fires the baseline already finds — the ~2 km level looks like a floor set by pixel size and ICNF position accuracy.
+6. **The geo-referencing correction generalises**: models trained almost entirely on pre-2018 (corrected) labels work very well after the SEVIRI change (2018: AP @ 5 km 0.85–0.86 vs. 0.71 baseline). 2017 (extreme year, many simultaneous fires) is the hardest year for all methods but shows the largest absolute gain (+0.13–0.14). 2019 shows the smallest gain (cnn3d +0.05 at 5 km, ConvLSTM ±0); per-year numbers rest on few targets (2018: ~35, 2019: ~90), so they are noisy.
+- Caveats: one test evaluation, 3 seeds; test years 2017–2019 only (2017 dominates); ICNF ignition positions are themselves uncertain.

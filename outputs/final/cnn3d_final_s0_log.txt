@@ -1,0 +1,22 @@
+device mps; parameters 63,073; train crops per epoch 7,146 (2,382 positive); validation periods 844; config {'step_agg': 4, 'channels': ['frp', 'confidence', 'detected', 'period', 'time', 'pt', 'persistent'], 'history_h': 6, 'tail_h': 6, 'arch': 'cnn3d', 'layers': 2, 'hidden': 32, 'kernel': 3, 'readout': 'last', 'crop': 32, 'sigma': 1.0, 'ignore_r': 2.0, 'min_target_ha': None, 'loss': 'focal', 'neg_ratio': 2.0, 'flip': True, 'name': 'final/cnn3d_final_s0', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 0, 'workers': 0, 'val_batch': 16, 'val_amp': False, 'train_splits': 'train,val', 'no_val': True, 'no_flip': False}
+{"epoch": 1, "train_loss": 1.4076, "train_min": 2.2379}
+{"epoch": 2, "train_loss": 0.9197, "train_min": 2.1431}
+{"epoch": 3, "train_loss": 0.8971, "train_min": 2.1479}
+{"epoch": 4, "train_loss": 0.8275, "train_min": 2.1462}
+{"epoch": 5, "train_loss": 0.7743, "train_min": 2.1448}
+{"epoch": 6, "train_loss": 0.7569, "train_min": 2.1572}
+{"epoch": 7, "train_loss": 0.7485, "train_min": 2.1898}
+{"epoch": 8, "train_loss": 0.7357, "train_min": 2.1605}
+{"epoch": 9, "train_loss": 0.7181, "train_min": 2.1445}
+{"epoch": 10, "train_loss": 0.7049, "train_min": 2.1569}
+{"epoch": 11, "train_loss": 0.6938, "train_min": 2.18}
+{"epoch": 12, "train_loss": 0.6943, "train_min": 2.1781}
+{"epoch": 13, "train_loss": 0.6887, "train_min": 2.1733}
+{"epoch": 14, "train_loss": 0.6672, "train_min": 2.1969}
+{"epoch": 15, "train_loss": 0.6626, "train_min": 2.1836}
+{"epoch": 16, "train_loss": 0.6552, "train_min": 2.1567}
+{"epoch": 17, "train_loss": 0.6376, "train_min": 2.152}
+{"epoch": 18, "train_loss": 0.6493, "train_min": 2.1624}
+{"epoch": 19, "train_loss": 0.6369, "train_min": 2.1526}
+{"epoch": 20, "train_loss": 0.6569, "train_min": 2.1538, "saved": true}
+best mean AP (val) -1.0000; checkpoint models/final/cnn3d_final_s0.pt
