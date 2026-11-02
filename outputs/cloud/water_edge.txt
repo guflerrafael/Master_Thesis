@@ -1,0 +1,85 @@
+
+1. Share of Portuguese cells with flag 11
+     start        end  days  share                  versions
+2015-01-01 2015-02-03    34  0.217                     [2.3]
+2015-02-04 2015-02-04     1  0.192                     [2.3]
+2015-02-05 2015-12-31   330  0.217         [2.3, 2.3 v0.0.4]
+2016-01-01 2016-04-25   116  0.024 [2.0, 2.0 v0.0.4, v0.0.4]
+2016-04-26 2016-04-26     1  0.105                 [2.0 2.2]
+2016-04-27 2016-12-31   249  0.217       [2.2, 2.2 2.3, 2.3]
+  blind cells: 1,469 of 6,760; also in January 2015: 1,469
+
+2. Flags on two days of late 2016
+  blind cells: 5: 0.2%, 6: 0.0%, 11: 99.3%, 255: 0.5%
+  other Portuguese cells: 0: 46.4%, 1: 0.0%, 3: 32.2%, 5: 0.1%, 6: 0.0%, 7: 0.0%, 8: 13.3%, 10: 7.2%, 254: 0.2%, 255: 0.5%
+
+3. Detections on Portuguese cells (blind cells are 21.7% of the cells)
+blind     False  True  share on blind
+time_utc                             
+2004      22295   567           0.025
+2005      79958  2160           0.026
+2006      20497   275           0.013
+2007       7556   120           0.016
+2008       3865    29           0.007
+2009      22474    64           0.003
+2010      32526   423           0.013
+2011      16441   112           0.007
+2012      23903   402           0.017
+2013      44553   373           0.008
+2014       4054   108           0.026
+2015      14458   453           0.030
+2016      41799   757           0.018
+2017      51641  1829           0.034
+2018       8506   105           0.012
+2019       9084   176           0.019
+2020      12172   297           0.024
+2021       4122   136           0.032
+2022      25044    35           0.001
+2023       6868   186           0.026
+2024      30710   158           0.005
+2025      41010  1414           0.033
+
+4. Fires >= 50 ha on Portuguese cells, share seen
+       size         mean       
+blind False True   False  True 
+split                          
+test    481    92  0.807  0.554
+train  2421   378  0.745  0.463
+val     425    72  0.847  0.597
+       size        mean      
+blind False True  False True 
+year                         
+2004    244    45  0.68  0.51
+2005    548    97  0.82  0.58
+2006    188    29  0.57  0.45
+2007     81    14  0.63  0.43
+2008     48     7  0.75  0.57
+2009    235    34  0.71  0.29
+2010    273    47  0.69  0.30
+2011    225    28  0.69  0.32
+2012    226    26  0.76  0.50
+2013    298    41  0.90  0.54
+2014     55    10  0.85  0.50
+2015    153    25  0.83  0.68
+2016    272    47  0.86  0.55
+2017    346    62  0.81  0.55
+2018     42     6  0.71  0.67
+2019     93    24  0.83  0.54
+
+5. Validation fires >= 50 ha (cloudy = over 50% not observable from start to end, at least 6 h)
+              fires   seen  unseen
+blind cloudy                      
+False False     383  0.896      40
+      True       42  0.405      25
+True  False      57  0.667      19
+      True       15  0.333      10
+  unseen in a cloudy or blind group: 54 of 94; more than at the seen rate 0.896 of the other fires: 42
+
+6. Model, validation, mean over seeds (43 of 403 targets on blind cells)
+k [km]                               5      10
+AP                                0.635  0.704
+AP without false alarms on blind  0.643  0.711
+recall on blind                   0.767  0.845
+recall elsewhere                  0.848  0.904
+
+figure: figures/cloud/water_edge_map.png

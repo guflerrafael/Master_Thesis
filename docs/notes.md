@@ -1177,3 +1177,45 @@ Design options:
 2. **Space–time heatmap (t, i, j)**, second, if pair separation is the goal. The output is 12 hourly maps, each target a 3D Gaussian with σ_t ≈ 1 h (the ±1 h spread of the timing above), and peaks are found in 3D. This could separate up to ~60 % of the close pairs. Costs: 12× sparser positives, a different decoder, matching in space and time. The 3D CNN would need to keep the time axis of the period instead of pooling it away (a decoder or a transposed conv along t).
 
 Figure of the planned model: `figures/model/model_cnn3d_st.png/.pdf` (`src/plot_overview_diagrams.py`, `fig_model_st`). It shows the input, the encoder and the new decoder with the time resolution of each block, the skip connections, the global context, the per-hour head and the 12 hourly maps. The maps are drawn as targets (σ_t = 1 h), because the model is not trained yet. Example: validation period 2016-08-20 06–18 UTC, two targets 0.8 cells apart that start 6.2 h and 10.2 h into the period. They merge in today's 2D target and appear as separate peaks over the hours.
+
+### 6.20 Cloud as a model input: go/no-go test on validation (2026-11-02)
+
+Question: is a cloud channel worth adding to training (6.2, 6.6)? Test on the validation years 2015–2016 only, with the `ablations_georef/cnn3d_final_s0-2` checkpoints (trained on 2004–2014). The test years stay untouched. Scripts `src/download_msg_quality.py` (LSA SAF Quality Product, cropped to the model grid), `src/cloud_diagnostic.py` and `src/water_edge_check.py`, outputs `outputs/cloud/diagnostic.txt` and `outputs/cloud/water_edge.txt`, figure `figures/cloud/water_edge_map.png`.
+
+Data: 731 of 731 days, 99.6 % of slots, NWC-CMa cloud mask on all days. Every validation detection carries flag 1/2 in the same slot and cell, so the grid alignment holds. Not observable = cloud, sun glint, bad input or no file. Water and water-edge cells are left out of the shares, because they do not report cloud.
+
+**Result at 10 km: NO-GO** (rule fixed before seeing the data: GO needs a re-scoring gain ≥ 0.02 AP with an interval above 0).
+
+| Test | Result |
+|---|---|
+| AP gain from cloud features (re-scoring fitted on the other year) | −0.002 [−0.010, +0.008]; seeds +0.001, −0.004, −0.003 |
+| AP if all false alarms reappearing after a cloudy gap vanished | +0.009 (upper bound) |
+| Cloud in the 3 h before detection, false alarms − hits at the same score | −0.019 [−0.060, +0.018] |
+| Recall, clearest third of targets − cloudiest third | −0.100 [−0.196, +0.052] |
+
+At 5 km the gain is −0.005 [−0.013, +0.005]. The gain stays between −0.001 and −0.002 at 10 km under three ways of counting the water-edge cells.
+
+- **Reappearances:** at best F1, 52 % of false alarms have a detection nearby in the 48 h before with a gap ≥ 1 h, against 35 % of hits (+0.19 [0.08, 0.30] at the same score). Only 14 % of these reappearing false alarms follow a mostly cloudy gap. Adding reappearance as a simple feature gains only +0.002 AP.
+- **Misses:** they concentrate in busy periods, not cloudy ones. Recall is about 1.00 in quiet periods and 0.77–0.89 in busy ones. Recall does not fall under cloud, but targets only include fires SEVIRI saw, so this does not mean cloud helps.
+- **Unconfirmed candidates (flags 6, 7):** present in the 3 h before detection for 26 % of false alarms and 19 % of hits, so no sign of an earlier signal for true fires. Not tested in re-scoring.
+
+Why SEVIRI misses fires (validation fires ≥ 50 ha, `src/water_edge_check.py`). Cloudy = over 50 % not observable from the ICNF start to the end, at least 6 h:
+
+| Fire location | Fires | Seen | Unseen |
+|---|---|---|---|
+| Neither cloudy nor water edge | 383 | 90 % | 40 |
+| Cloudy | 42 | 40 % | 25 |
+| Water-edge cell | 57 | 67 % | 19 |
+| Both | 15 | 33 % | 10 |
+
+So 54 of the 94 unseen fires are cloudy or on a water-edge cell, roughly 42 more than the 90 % seen rate would give. The other 40 are unexplained.
+
+**Water-edge mask** (flag 11, no fire detection, same script): 1,469 of 6,760 Portuguese cells (21.7 %), along the coast and in rings around reservoirs. These cells receive only 0.1–3.4 % of the detections per year in 2004–2025, so the mask looks long-standing, but only 2015–2016 is confirmed from Quality files. Fires there are still seen, probably through neighbouring cells, but less often: fires ≥ 50 ha are seen 46 % vs. 75 % elsewhere in 2004–2014, 60 % vs. 85 % in 2015–2016 and 55 % vs. 81 % in 2017–2019 (ICNF vs. SEVIRI only, no model). Effect on the model is small: recall @ 10 km 0.85 (43 targets) vs. 0.90 elsewhere, and +0.007 AP if all false alarms on these cells vanished. In January–April 2016 (algorithm 2.0) the mask almost disappears (2.4 % of cells).
+
+Limits: re-scoring only changes the scores of existing peaks, so it cannot show new peaks or better locations, and it is not a retrained model. Only two years, with about 39 missed targets. Algorithm versions vary within the two years (2.0, 2.2, 2.3).
+
+Consequences:
+- No cloud channel for now and no Quality download for the other years.
+- The case for the mask as a companion to memory models (6.6) is weaker: most reappearing false alarms follow gaps with a clear view.
+- Report as a tested negative result. The table above explains part of the unseen fires (limitation in 6.2, 6.17).
+- Next for precision: why fires reappear after clear gaps, and errors in busy periods.

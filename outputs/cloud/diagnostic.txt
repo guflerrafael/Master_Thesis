@@ -1,0 +1,82 @@
+
+1. Alignment
+  days absent 5; detections in present slots 74,530 of 74,530; with flag 1/2 100.0%
+  flag shares: 0: 28.1%, 1: 0.0%, 2: 0.0%, 3: 21.2%, 5: 0.1%, 6: 0.0%, 7: 0.0%, 8: 6.1%, 10: 29.7%, 11: 13.9%, 253: 0.7%, 254: 0.1%, 255: 0.0%
+  Portugal cells always water or water edge: 0.0%; ever both water/edge and another flag: 27.4%
+
+===== match within 10 km =====
+
+2. True vs. false positives
+  counts per seed: {0: {'fp': 2055, 'tp': 365}, 1: {'fp': 2219, 'tp': 361}, 2: {'fp': 3183, 'tp': 359}}
+    predictions          feature    TP    FP  FP - TP, same score  2.5 %  97.5 %
+all predictions    unobs_history 0.096 0.156                0.026 -0.007   0.062
+all predictions     unobs_period 0.095 0.155                0.003 -0.029   0.034
+all predictions     unobs_before 0.102 0.136               -0.019 -0.060   0.018
+all predictions   reappear_cloud 0.006 0.023                0.038  0.016   0.063
+all predictions         reappear 0.328 0.327                0.145  0.067   0.225
+all predictions candidate_before 0.192 0.258                0.079  0.013   0.146
+     at best F1    unobs_history 0.086 0.127                0.040 -0.007   0.087
+     at best F1     unobs_period 0.077 0.097                0.010 -0.028   0.049
+     at best F1     unobs_before 0.085 0.092               -0.010 -0.059   0.039
+     at best F1   reappear_cloud 0.008 0.071                0.061  0.000   0.127
+     at best F1         reappear 0.346 0.517                0.192  0.077   0.303
+     at best F1 candidate_before 0.185 0.303                0.082 -0.024   0.199
+
+3. Recall by cloud cover at the target (history and period, 5 x 5 window)
+         targets  recall
+bin                     
+<= 10 %      295   0.879
+10-50 %       96   0.941
+> 50 %        12   1.000
+  recall in the clearest third (134 targets, cover <= 0.01) minus the cloudiest third (135 targets, cover > 0.07): -0.100 [-0.196, 0.052]
+
+4. Re-scoring, 10 km (fitted on the other year, status fixed)
+  AP model 0.704; refit without cloud 0.706; with cloud 0.705
+  gain -0.002 [-0.010, +0.008]; if all reappear_cloud false positives vanished: AP 0.713 (+0.009)
+    seed 0: gain +0.001
+    seed 1: gain -0.004
+    seed 2: gain -0.003
+
+===== match within 5 km =====
+
+2. True vs. false positives
+  counts per seed: {0: {'fp': 2134, 'tp': 340}, 1: {'fp': 2300, 'tp': 337}, 2: {'fp': 3266, 'tp': 338}}
+    predictions          feature    TP    FP  FP - TP, same score  2.5 %  97.5 %
+all predictions    unobs_history 0.095 0.155                0.027 -0.008   0.056
+all predictions     unobs_period 0.094 0.154                0.006 -0.022   0.036
+all predictions     unobs_before 0.098 0.136               -0.012 -0.050   0.019
+all predictions   reappear_cloud 0.006 0.023                0.034  0.011   0.057
+all predictions         reappear 0.323 0.328                0.150  0.071   0.223
+all predictions candidate_before 0.185 0.260                0.075  0.010   0.141
+     at best F1    unobs_history 0.084 0.123                0.039 -0.003   0.102
+     at best F1     unobs_period 0.076 0.099                0.013 -0.015   0.039
+     at best F1     unobs_before 0.078 0.100                0.009 -0.027   0.058
+     at best F1   reappear_cloud 0.007 0.056                0.048 -0.000   0.103
+     at best F1         reappear 0.341 0.508                0.191  0.079   0.308
+     at best F1 candidate_before 0.177 0.279                0.068 -0.026   0.159
+
+3. Recall by cloud cover at the target (history and period, 5 x 5 window)
+         targets  recall
+bin                     
+<= 10 %      295   0.820
+10-50 %       96   0.889
+> 50 %        12   0.917
+  recall in the clearest third (134 targets, cover <= 0.01) minus the cloudiest third (135 targets, cover > 0.07): -0.071 [-0.181, 0.083]
+
+4. Re-scoring, 5 km (fitted on the other year, status fixed)
+  AP model 0.635; refit without cloud 0.637; with cloud 0.632
+  gain -0.005 [-0.013, +0.005]; if all reappear_cloud false positives vanished: AP 0.643 (+0.008)
+    seed 0: gain -0.003
+    seed 1: gain -0.006
+    seed 2: gain -0.006
+
+5. ICNF fires seen vs. not seen by SEVIRI: not observable in the 6 h after the start
+                fires   mean   high
+big      seen                      
+< 50 ha  False    473  0.287  0.254
+         True     405  0.104  0.064
+>= 50 ha False     94  0.354  0.340
+         True     403  0.102  0.052
+
+Decision (10 km)
+  NO-GO: no clear link to the errors; do not train with a cloud channel.
