@@ -3,6 +3,7 @@
   figures/pipeline/pipeline_overview.png / .pdf   raw files -> labels / inputs -> model -> scores
   figures/model/model_convlstm.png / .pdf         ConvLSTM (conv_final): input, layers, target, output
   figures/model/model_cnn3d.png / .pdf            3D CNN (cnn3d_final): input, layers, target, output
+  figures/model/model_cnn3d_st.png / .pdf         planned space-time 3D CNN (notes 6.19): hourly output, shown with targets
 
 The model figures show real data: one validation period (2016-08-06 06 UTC, 32 x 32 crop around a
 target), its target heatmap, and the prediction of the seed-0 checkpoint of each model
@@ -261,11 +262,154 @@ def fig_model(kind):
     print(f"figure: figures/model/{M['out']}.png / .pdf ({n_par:,} parameters)")
 
 
+# ---------------------------------------------------------------- planned space-time model
+
+ST_PERIOD = pd.Timestamp("2016-08-20 06:00", tz="UTC")   # validation: two targets 0.8 cells apart, 4 h apart
+ST_SIGMA_T = 1.0                                         # target width in time [h]
+ST_PARAMS = "≈ 140k"                                     # prototype benchmark (notes 6.19); read from model.py once built
+
+
+def time_bar(ax, x, y, w, n, a, b, h=0.17, label_txt=None):
+    """n cells across width w; cells a..b-1 (the 12 h period) highlighted."""
+    cw = w / n
+    for k in range(n):
+        ax.add_patch(Rectangle((x + k * cw, y), cw, h, facecolor=E.BLUE if a <= k < b else E.GRID,
+                               edgecolor="white", lw=0.6))
+    if label_txt:
+        label(ax, x + w + 0.08, y + h / 2, label_txt, 7.6, E.INK2)
+
+
+def st_example():
+    """Crop around the close pair of ST_PERIOD: hour of first detection, hourly 3D target, current 2D target."""
+    data = FireData()
+    x, y2d, _, lab = data.sample(ST_PERIOD)
+    tg = lab[lab["role"] == "target"].join(data.fires.set_index("fire_id")["start_utc"], on="fire_id")
+    tg["t_h"] = (tg["start_utc"] - ST_PERIOD).dt.total_seconds() / 3600
+    v = tg[["i_f", "j_f"]].values
+    d = np.hypot(*(v[:, None] - v[None]).transpose(2, 0, 1)) + np.eye(len(v)) * 99
+    a, b = np.unravel_index(d.argmin(), d.shape)
+    ci, cj = (v[a] + v[b]) / 2
+    i0, j0, s = int(round(ci)) - 5, int(round(cj)) - 5, 11
+    det = x[:, 2] > 0
+    first_h = np.where(det.any(0), det.argmax(0) / 4, np.nan)[i0:i0 + s, j0:j0 + s]
+    r, c = np.mgrid[i0:i0 + s, j0:j0 + s]
+    y3d = np.zeros((12, s, s), np.float32)
+    for q in tg.itertuples():
+        sp = np.exp(-((r - q.i_f) ** 2 + (c - q.j_f) ** 2) / 2)
+        for k in range(12):
+            y3d[k] = np.maximum(y3d[k], sp * np.exp(-((k + 0.5 - q.t_h) ** 2) / (2 * ST_SIGMA_T ** 2)))
+    pair = tg.iloc[[a, b]].sort_values("t_h")
+    return first_h, y3d, y2d[i0:i0 + s, j0:j0 + s], pair.assign(i_loc=pair["i_f"] - i0, j_loc=pair["j_f"] - j0)
+
+
+def fig_model_st():
+    first_h, y3d, y2d, pair = st_example()
+    W, H = 18, 9.6
+    fig = plt.figure(figsize=(W, H))
+    ax = fig.add_axes([0, 0, 1, 1]); ax.set_xlim(0, W); ax.set_ylim(0, H); ax.axis("off")
+    ax.text(0.2, 9.45, "Planned: space–time 3D CNN (cnn3d_st): one ignition map per hour of the 12 h period",
+            fontsize=14, weight="bold", va="top", color=E.INK)
+    ax.text(0.2, 9.0, "Same encoder as cnn3d_final. New: a decoder brings the time axis back to hourly steps, "
+                      "so the output keeps the hour of each ignition instead of pooling time away.",
+            fontsize=9.5, va="top", color=E.INK2)
+
+    # ---- 1 input
+    box(ax, 0.2, 2.75, 3.5, 5.85, "1  Input x", "24 hourly steps × 7 channels\n(frp, confidence, detected, period,\n"
+        "time, pt mask, persistent)\nshape 24 × 7 × H × W", SEV, SEV_EDGE, size=8.4)
+    time_bar(ax, 0.35, 6.75, 3.2, 24, 6, 18)
+    label(ax, 0.35, 6.55, "6 h history · 12 h period (blue) · 6 h tail", 7.6, E.INK2)
+    label(ax, 0.35, 6.15, "example: 2016-08-20 06–18 UTC (validation),\n11 × 11 cells; colour = hour of first detection\n(darker = earlier), SEVIRI only", 7.6, E.MUTED, va="top")
+    th = thumb(fig, ax, 0.4, 2.95, 2.45, 2.45, first_h, E.SEQ_BLUE.reversed(), 0, 24, "")
+    cb = fig.colorbar(th.images[0], ax=th, fraction=0.08, pad=0.04)
+    cb.set_ticks([0, 6, 12, 18, 24]); cb.ax.tick_params(labelsize=7)
+
+    # ---- 2 network as a U (encoder down, decoder up)
+    bw, bh = 2.55, 1.32
+    xe, xd = 4.25, 7.65
+    ye = [6.95, 5.0, 3.05]
+    blocks_e = [("E1  Conv3d 3×3×3", "7 → 16 channels, ReLU", 24),
+                ("E2  Conv3d, stride 2 in t", "16 → 32 channels, ReLU", 12),
+                ("E3  Conv3d, stride 2 in t", "32 → 32 channels, ReLU", 6)]
+    for k, (t, body, n) in enumerate(blocks_e):
+        xx = xe if k < 2 else (xe + xd) / 2
+        box(ax, xx, ye[k], bw, bh, t, body, SEV, SEV_EDGE, size=8.2)
+        time_bar(ax, xx + 0.15, ye[k] + 0.18, bw - 0.3, n, n // 4, 3 * n // 4)
+        label(ax, xx + bw / 2, ye[k] - 0.13, f"{n} steps of {24 // n} h", 7.6, SEV_EDGE, ha="center")
+    blocks_d = [("D1  upsample + Conv3d", "↑ to 24 steps, joined with E1\n→ 16 channels", 24),
+                ("D2  upsample + Conv3d", "↑ to 12 steps, joined with E2\n→ 32 channels", 12)]
+    for k, (t, body, n) in enumerate(blocks_d):
+        box(ax, xd, ye[k], bw, bh, t, body, ICNF, ICNF_EDGE, size=8.2)
+        time_bar(ax, xd + 0.15, ye[k] + 0.18, bw - 0.3, n, n // 4, 3 * n // 4)
+        label(ax, xd + bw / 2, ye[k] - 0.13, f"{n} steps of {24 // n} h", 7.6, ICNF_EDGE, ha="center")
+    label(ax, xe, 8.55, "2  Encoder: compress time", 10, SEV_EDGE, weight="bold")
+    label(ax, xd, 8.55, "3  Decoder: restore hours (new)", 10, ICNF_EDGE, weight="bold")
+    xm = (xe + xd) / 2
+    arrow(ax, (3.7, 6.1), (xe, ye[0] + bh / 2), SEV_EDGE)
+    arrow(ax, (xe + bw / 2, ye[0] - 0.25), (xe + bw / 2, ye[1] + bh), SEV_EDGE)
+    arrow(ax, (xe + bw / 2, ye[1] - 0.25), (xm + 0.4, ye[2] + bh), SEV_EDGE)
+    arrow(ax, (xm + bw - 0.4, ye[2] + bh), (xd + bw / 2, ye[1] - 0.25), ICNF_EDGE)
+    arrow(ax, (xd + bw / 2, ye[1] + bh), (xd + bw / 2, ye[0] - 0.25), ICNF_EDGE)
+    for k in range(2):   # skip connections: fine timing from the encoder
+        arrow(ax, (xe + bw, ye[k] + bh / 2), (xd, ye[k] + bh / 2), E.MUTED, lw=1.1)
+        label(ax, (xe + bw + xd) / 2, ye[k] + bh / 2 + 0.17, "skip", 7.6, E.MUTED, ha="center")
+
+    # global context
+    gx, gy, gw, gh = xe, 0.75, xd + bw - xe, 1.35
+    box(ax, gx, gy, gw, gh, "Global context (as in cnn3d_final)",
+        "max and mean of E3 over its 6 steps → 64 channels, copied to every hour:\n"
+        "each hour also 'knows' the whole 24 h window (did it keep burning? was it there before?)", JOINT, JOINT_EDGE, size=8.2)
+    arrow(ax, (xm + bw / 2, ye[2] - 0.27), (xm + bw / 2, gy + gh), E.INK2)
+
+    # ---- 4 cut to the period + head
+    xh, hw = 10.75, 2.35
+    box(ax, xh, ye[0], hw, bh, "Keep the period", "hours 7–18 of D1\n→ 16 × 12 × H × W", JOINT, JOINT_EDGE, size=8.2)
+    time_bar(ax, xh + 0.15, ye[0] + 0.18, hw - 0.3, 24, 6, 18)
+    arrow(ax, (xd + bw, ye[0] + bh / 2), (xh, ye[0] + bh / 2), ICNF_EDGE)
+    box(ax, xh, 3.5, hw, 2.1, "4  Head, every hour",
+        "join 16 + 64 channels\nConv3d 1×3×3 → 32, ReLU\nConv 1×1 → 1 logit\nsigmoid → p(hour, i, j)\n\n"
+        f"{ST_PARAMS} parameters (now 63k)", JOINT, JOINT_EDGE, size=8.2)
+    arrow(ax, (xh + hw / 2, ye[0] - 0.05), (xh + hw / 2, 5.6))
+    arrow(ax, (gx + gw, gy + gh / 2), (xh + hw / 2, 3.5), E.INK2, rad=0.25)
+
+    # ---- 5 output: 12 hourly maps
+    xo, ow = 13.45, 4.35
+    box(ax, xo, 3.95, ow, 4.65, "5  Output: 12 hourly maps", "", ICNF, ICNF_EDGE)
+    label(ax, xo + 0.15, 8.08, f"shown: target y (Gaussian σ = 1 cell, σ_t = {ST_SIGMA_T:.0f} h)", 7.8, E.INK2)
+    tw, tg_ = 0.62, 0.08
+    for k in range(12):
+        rr, cc = divmod(k, 6)
+        x0, y0 = xo + 0.2 + cc * (tw + tg_), 6.95 - rr * 1.0
+        a = thumb(fig, ax, x0, y0, tw, tw, y3d[k], E.SEQ_ORANGE, 0, 1, "")
+        a.set_title(f"{6 + k:02d}–{7 + k:02d}", fontsize=7, color=E.INK2, pad=2)
+    for q, name in zip(pair.itertuples(), "AB"):
+        k = int(q.t_h)
+        rr, cc = divmod(k, 6)
+        label(ax, xo + 0.2 + cc * (tw + tg_) + tw / 2, 6.95 - rr * 1.0 - 0.15, name, 9, E.INK, ha="center", weight="bold")
+    label(ax, xo + 0.15, 5.55,
+          f"A starts {pair['t_h'].iat[0]:.1f} h, B {pair['t_h'].iat[1]:.1f} h into the period (UTC hours shown);\n"
+          "0.8 cells apart: two separate peaks in (hour, i, j)", 7.8, E.INK2, va="top")
+    label(ax, xo + 0.15, 4.85, "decode: 3D local maxima (3 h × 3 × 3 cells)\n→ points (lat, lon, hour, score)", 8.2, E.INK, va="top")
+    arrow(ax, (xh + hw, 4.55), (xo, 5.2))
+
+    # ---- comparison with the current model
+    cx, cw_ = xo, ow
+    box(ax, cx, 0.75, cw_, 2.85, "Compared with cnn3d_final", "", JOINT, JOINT_EDGE)
+    thumb(fig, ax, cx + 0.2, 1.75, 1.1, 1.1, y2d, E.SEQ_ORANGE, 0, 1, "")
+    label(ax, cx + 1.45, 2.3, "now: time is pooled away →\none 2D map: A and B merge\ninto one bump and one peak,\nso one of them is missed", 7.8, E.INK2)
+    label(ax, cx + 0.2, 1.2, "new: same encoder + decoder + per-hour head;\nevery ignition also gets an hour.\n≈ 2.3× training time per step", 7.8, E.INK2)
+
+    for ext in ("png", "pdf"):
+        fig.savefig(FIG_M / f"model_cnn3d_st.{ext}", bbox_inches="tight")
+    plt.close(fig)
+    print("figure: figures/model/model_cnn3d_st.png / .pdf (planned model)")
+
+
 def main():
     FIG_P.mkdir(parents=True, exist_ok=True); FIG_M.mkdir(parents=True, exist_ok=True)
     fig_pipeline()
     fig_model("convlstm")
     fig_model("cnn3d")
+    fig_model_st()
 
 
 if __name__ == "__main__":

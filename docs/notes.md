@@ -47,6 +47,7 @@ Run from the repository root, in this order:
 18. `.venv/bin/python src/plot_pipeline_figures.py`: figures explaining labels, loss weights, time aggregation and the geo-referencing frames → `figures/pipeline/` (data-pipeline explainer doc, 2026-10-26)
 19. `.venv/bin/python src/plot_overview_diagrams.py`: overview figures of the data pipeline (`figures/pipeline/pipeline_overview.png/.pdf`) and one per model (`figures/model/model_convlstm.png/.pdf`, `model_cnn3d.png/.pdf`; use the checkpoints `ablations_georef/conv_final_s0` and `cnn3d_final_s0`)
 20. `.venv/bin/python src/plot_test_examples.py --name final/cnn3d_final_s0`: predicted vs. ICNF ignition maps of the final model on the test split, cases chosen by fixed rules (6.18)
+21. `.venv/bin/python src/time_target_analysis.py > outputs/time_target_analysis.txt`: can the ignition time be a target? (6.19)
 
 ## 1. Data
 
@@ -1157,3 +1158,22 @@ What the examples show:
 - **Merged pair:** two targets one cell apart produce one peak, which matches one of them. This is the case a space–time output (ignition time as a target) should separate.
 - **False alarm:** a detection on the Minho border river (Portugal–Spain), with no ICNF fire. It could be a fire on the Spanish side.
 
+### 6.19 Ignition time as a target: data check (2026-10-29)
+
+Supervisor meeting: add the ignition time as a target. For an annual ignition inventory (the reconstruction use case) the start time is part of the answer. A time axis could also separate close ignitions that merge into one peak today. Script `src/time_target_analysis.py`, output `outputs/time_target_analysis.txt`, figure `figures/time/time_target_analysis.png`. It uses train + validation targets 2004–2016 only (2,382), so the design choice does not use the test years.
+
+- **Start-time precision:** 60 % of ICNF start times are not a multiple of 5 minutes, and only 5 % are on the full hour. The times are recorded to the minute, not rounded to hours.
+- **Range:** by construction every target starts inside its 12 h period. The time target is therefore the hours since the period start, in [0, 12). Most starts fall in hours 5–9 of the 06–18 UTC period (11–15 UTC).
+- **How well SEVIRI timing can match ICNF** (first detection ≤ 1.5 cells from the ICNF point, minus the ICNF start; this uses the true location, so it is a best case for an estimate from detections alone):
+  - all targets: median +0.18 h, IQR −0.15 … +0.99 h, |error| median 0.52 h, ≤ 1 h 76 %, ≤ 2 h 87 %;
+  - isolated fires: |error| median 0.28 h, p10 −0.13 h. Where nothing else burns, ICNF and SEVIRI agree to about 15 min, so **ICNF start times are good enough to train on**;
+  - with hourly input steps: |error| median 0.58 h, ≤ 1 h 70 %. Hourly steps cost little in time accuracy.
+- **Places that were already burning:** 19.9 % of targets have a detection ≤ 1.5 cells away in the 6 h before their start (24.8 % with neighbours, 3.3 % isolated). For these, the first detection belongs to an earlier fire, which produces the spike at −1 h in panel (b). The time then has to come from a change in the signal (new pixels, an FRP jump), not from the first detection. This is the hard subset to report separately.
+- **Nucleus-birth estimate** (the baseline, nearest non-reappeared nucleus born ≤ 5 km away, sensor frame): it finds a nucleus for only 1,432 of 2,382 targets (60 %; 89 % of isolated fires, 52 % of fires with neighbours). Where it does, |error| median 0.38 h, ≤ 1 h 72 %. A fire that joins an active event has no nucleus of its own, so the baseline has no time for it.
+- **Close pairs** (two targets ≤ 2 cells apart in one period): 175 pairs in 102 periods, involving 291 targets (12 %). Start-time difference: median 1.63 h; ≥ 1 h for 62 %, ≥ 2 h for 46 %, ≥ 3 h for 27 %; identical for 7 %. A time axis with ~1 h resolution could in principle separate about half to two-thirds of them. The rest stay merged.
+
+Design options:
+1. **Time head (regression), recommended first.** A second output channel predicts the start time (hours since the period start) at every pixel, trained only at target pixels (CenterNet-style offset head). Use a Laplace negative log-likelihood so the model also gives an uncertainty, which helps for the already-burning cases. At inference the time is read at each heatmap peak. The cost is one extra 1 × 1 conv output, and the heatmap and AP should stay unchanged (check). Evaluation: |t_pred − t_ICNF| for matched fires (median, ≤ 1 h, ≤ 2 h), split by isolated / with neighbours / already burning. Compare with the first-detection and nucleus-birth estimators above, on the same matched fires. Limit: it does not separate merged pairs.
+2. **Space–time heatmap (t, i, j)**, second, if pair separation is the goal. The output is 12 hourly maps, each target a 3D Gaussian with σ_t ≈ 1 h (the ±1 h spread of the timing above), and peaks are found in 3D. This could separate up to ~60 % of the close pairs. Costs: 12× sparser positives, a different decoder, matching in space and time. The 3D CNN would need to keep the time axis of the period instead of pooling it away (a decoder or a transposed conv along t).
+
+Figure of the planned model: `figures/model/model_cnn3d_st.png/.pdf` (`src/plot_overview_diagrams.py`, `fig_model_st`). It shows the input, the encoder and the new decoder with the time resolution of each block, the skip connections, the global context, the per-hour head and the 12 hourly maps. The maps are drawn as targets (σ_t = 1 h), because the model is not trained yet. Example: validation period 2016-08-20 06–18 UTC, two targets 0.8 cells apart that start 6.2 h and 10.2 h into the period. They merge in today's 2D target and appear as separate peaks over the hours.

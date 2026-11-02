@@ -1,0 +1,29 @@
+targets 2004–2016 (train + val): 2382
+
+A  ICNF start time, minute of the hour:
+   :00 5%, :30 4%, other multiples of 5 30%, not a multiple of 5 60%
+
+B  start in hours since window start (6–18 = the 12 h period):
+   min 6.00, max 17.97; by hour of the period: 0:80, 1:95, 2:154, 3:148, 4:170, 5:256, 6:276, 7:359, 8:344, 9:252, 10:135, 11:113
+
+C  oracle location: first detection ≤ 1.5 cells from the ICNF point minus ICNF start
+   all: n = 2380, median +0.18 h, IQR -0.15 … +0.99 h, p10–p90 -0.80 … +2.47 h; |error| median 0.52 h, ≤ 1 h 76%, ≤ 2 h 87%
+   isolated: n = 544, median +0.25 h, IQR +0.02 … +0.97 h, p10–p90 -0.13 … +2.24 h; |error| median 0.28 h, ≤ 1 h 77%, ≤ 2 h 88%
+   with neighbours: n = 1836, median +0.17 h, IQR -0.25 … +1.00 h, p10–p90 -0.83 … +2.55 h; |error| median 0.60 h, ≤ 1 h 76%, ≤ 2 h 87%
+   50–100 ha: n = 870, median +0.22 h, IQR -0.12 … +1.01 h, p10–p90 -0.75 … +2.30 h; |error| median 0.52 h, ≤ 1 h 75%, ≤ 2 h 88%
+   100–500 ha: n = 1076, median +0.22 h, IQR -0.13 … +1.04 h, p10–p90 -0.78 … +2.69 h; |error| median 0.53 h, ≤ 1 h 75%, ≤ 2 h 85%
+   500– ha: n = 434, median +0.12 h, IQR -0.22 … +0.65 h, p10–p90 -0.92 … +1.96 h; |error| median 0.47 h, ≤ 1 h 81%, ≤ 2 h 90%
+   same, from hourly steps (centre of the hour): n = 2380, median +0.42 h, IQR -0.15 … +1.17 h, p10–p90 -0.57 … +2.63 h; |error| median 0.58 h, ≤ 1 h 70%, ≤ 2 h 86%
+   not already burning: n = 1906, median +0.33 h, IQR +0.02 … +1.17 h, p10–p90 -0.17 … +2.70 h; |error| median 0.38 h, ≤ 1 h 72%, ≤ 2 h 85%
+   already burning (detection ≤ 1.5 cells, 6 h – 30 min before the start): 19.9% (474); isolated 3.3%, with neighbours 24.8%
+
+D  nearest nucleus birth (≤ 5 km, not reappeared; sensor frame) minus ICNF start
+   all: n = 1432, median +0.25 h, IQR -0.02 … +0.99 h, p10–p90 -0.25 … +2.25 h; |error| median 0.38 h, ≤ 1 h 72%, ≤ 2 h 85%
+   isolated: n = 486, median +0.23 h, IQR +0.02 … +0.93 h, p10–p90 -0.13 … +2.23 h; |error| median 0.28 h, ≤ 1 h 76%, ≤ 2 h 88%
+   with neighbours: n = 946, median +0.25 h, IQR -0.05 … +1.00 h, p10–p90 -0.41 … +2.26 h; |error| median 0.43 h, ≤ 1 h 69%, ≤ 2 h 84%
+
+E  target pairs ≤ 2.0 cells apart in the same period: 175 pairs in 102 periods (291 of 2382 targets)
+   start-time difference: median 1.63 h, IQR 0.53 … 3.16 h; = 0 h 7%, < 1 h 38%, ≥ 1 h 62%, ≥ 2 h 46%, ≥ 3 h 27%
+   pairs separable by more than the IQR of the oracle lag (1.14 h): 61%
+
+figure: figures/time/time_target_analysis.png
