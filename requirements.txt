@@ -3,6 +3,8 @@
 pandas==2.3.3
 numpy==2.3.5
 scipy==1.16.3          # reading the SEVIRI .mat file
+h5py==3.16.0           # reading the LSA SAF FRP-PIXEL HDF5 files (src/download_msg_frp.py)
+requests==2.34.2       # downloading from the LSA SAF data server (src/download_msg_frp.py)
 openpyxl==3.1.5        # reading the ICNF .xlsx file
 pyarrow==25.0.1        # parquet
 matplotlib==3.10.0
