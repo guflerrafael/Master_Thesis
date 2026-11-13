@@ -66,6 +66,8 @@ EXPERIMENTS = {
     "neg2_noflip":      (4, "--neg-ratio 2 --no-flip", "2 hard negatives per positive + no flips"),
     "conv_final":       (4, "--hidden 16 --neg-ratio 2 --readout max", "ConvLSTM candidate: 16 ch + 2 negatives + max readout"),
     "cnn3d_final":      (4, "--arch cnn3d --neg-ratio 2", "3D-CNN candidate: no recurrence + 2 negatives"),
+    # ---- ICNF SGIF export (notes.md 8.6)
+    "cnn3d_final_rk":   (5, "--arch cnn3d --neg-ratio 2 --rekindle-ignore", "cnn3d_final + ignore regions at all rekindle records"),
 }
 SMOKE = "--epochs 1 --max-batches 3 --val-periods 10"
 

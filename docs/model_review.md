@@ -171,10 +171,10 @@ Literature gaps: still no study found that *learns* ignition locations from geos
 ### 6.4 Labels
 - 10 % of the fires ≥ 100 ha sit on coordinates shared with other fires (notes §2.3). Flag targets at points used ≥ 2 times and test down-weighting them (an ablation, not a rule).
 - Report recall against **all** validation fires ≥ 50 ha, not only seen ones: 497 fires, of which 94 (19 %) are unseen and currently ignored. Detection rate by size: 50–100 ha 76 %, ≥ 1,000 ha 91 %. The current numbers are conditional on SEVIRI seeing the fire; say so in the thesis.
-- Rekindles: the 28 % of false alarms at places burning 1–72 h earlier need the ICNF rekindle flag, if it exists (literature.md §4.3), before any memory model is judged.
+- Rekindles: the 28 % of false alarms at places burning 1–72 h earlier need the ICNF rekindle flag, if it exists (literature.md §4.3), before any memory model is judged. Update 2026-11-13: the ICNF SGIF export has this flag (cause 711, "Reacendimento"). On validation, 24 % of the false alarms at best F1 lie within 10 km of a rekindle record of the same period (5–10 % by chance); see notes §8.4.
 
 ### 6.5 More and finer data
-- **SEVIRI FRP-PIXEL 2020–2024** from the LSA SAF archive (same product as the extract; ICNF labels exist; 2022 was a large fire year). This is the cheapest way to add ~15–25 % more targets and a later test year.
+- **SEVIRI FRP-PIXEL 2020–2024** from the LSA SAF archive (same product as the extract; ICNF labels exist; 2022 was a large fire year). This is the cheapest way to add ~15–25 % more targets and a later test year. Update 2026-11-02: 2020–2025 is downloaded. The ICNF file ends in 2023, so 2020–2023 add 321 targets (+11 %); The ICNF SGIF export (2026-11-13) adds 232 targets for 2024–2025, now connected. Checks and implementation in notes §7–8.
 - **VIIRS 375 m (FIRMS, 2012+)** as a finer reference: it measures the true sub-pixel limit and could serve as an auxiliary target.
 - **MTG-FCI FRP (1 km, 10 min, 2025+)**: an outlook or an out-of-distribution test on a better sensor.
 - Covariates (notes §3, objective iv): wind (ERA5-Land u/v), DEM/slope, FWI. The expected effect on localisation is modest (the input is already the fire itself), but they may help the "active in history" class (direction of spread) and they are required for objective (iv). Add them as static/hourly channels to `cnn3d_final` and run them as ablations.

@@ -7,13 +7,16 @@ __pycache__/
 .DS_Store
 
 # Reference papers (not versioned)
-documents/
+docs/papers/
 
 # One parquet per day from src/download_msg_frp.py (the merged table is in data/processed/)
 data/raw/msg_frp_pt/
 
 # One crop per day from src/download_msg_quality.py
 data/raw/msg_quality_pt/
+
+# ICNF SGIF export 2001-2025 (three xlsx, 157 MB; the cleaned table is data/processed/icnf_fires.parquet)
+data/raw/icnf/
 
 # Ablation smoke tests (src/run_ablations.py --smoke)
 models/ablations_smoke/

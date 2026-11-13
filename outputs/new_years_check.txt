@@ -1,0 +1,71 @@
+1. SEVIRI
+  native pixels active in both sources: 4,789; lat/lon differing: 0; collisions in the union: 0; new pixels: 615
+  ABS_LINE = 1857 - row and ABS_PIXEL = 1857 + col: 210,372 of 210,372 rows
+  overlap days ['2019-07-20', '2019-07-21', '2019-07-22']: LSA SAF rows [564, 794, 506], extract shifted +0 slots [564, 794, 506] -> match
+
+2. ICNF: icnf_fires.parquet vs commit 5a0f39d
+  rows: 806,926 at 5a0f39d, 821,433 now (14,507 in 2024-2025); sources {'sgif': 492213, 'ignic_xlsx': 329220}
+  fire_id 0-806,925: rows differing per column {'start_local': 0, 'end_local': 1, 'municipality_code': 0, 'district': 0, 'municipality': 0, 'burned_area_ha': 0, 'lat': 0, 'lon': 0, 'end_invalid': 1, 'duration_h': 1, 'coord_invalid': 0, 'start_utc': 0, 'end_utc': 1}
+  end-time changes: [806684] ([1.2] ha)
+  SGIF field coverage by year:
+              rows  cause known  rekindles  first intervention    fwi  alert source
+start_local                                                                        
+2001         28907        0.079       1159               0.000  1.000         1.000
+2002         28961        0.092       1625               0.000  1.000         1.000
+2003         22998        0.102       1096               0.000  1.000         1.000
+2004         27766        0.077       1055               0.000  1.000         1.000
+2005         41625        0.083       1997               0.000  1.000         1.000
+2006         24241        0.127        304               0.002  1.000         1.000
+2007         25131        0.380        565               0.000  1.000         1.000
+2008         18958        0.516        319               0.846  1.000         1.000
+2009         29783        0.494       1272               0.864  1.000         1.000
+2010         26113        0.644       2722               0.910  1.000         1.000
+2011         29781        0.698       3736               0.992  1.000         1.000
+2012         25352        0.752       2292               1.000  0.994         1.000
+2013         23127        0.771       2416               1.000  0.997         1.000
+2014          9388        0.866        319               1.000  0.996         1.000
+2015         19643        0.827       1535               1.000  0.999         1.000
+2016         16104        0.794       1384               1.000  0.999         1.000
+2017         21005        0.822       1758               1.000  0.999         1.000
+2018         12274        0.837        723               1.000  1.000         1.000
+2019         10831        0.915        595               1.000  0.988         1.000
+2020          9619        0.906        525               0.998  0.997         1.000
+2021          8186        0.970        205               0.998  1.000         1.000
+2022         10390        0.967        482               0.996  0.998         1.000
+2023          7523        0.965        256               0.999  0.984         0.998
+2024          6255        0.985        373               0.979  0.997         0.812
+2025          8252        0.998        661               0.981  1.000         0.781
+
+3. ICNF time zone (fires >= 10 ha, first detection <= 5 km in [start - 6 h, start + 24 h], no detection <= 10 km in the 48 h before; recorded start read as UTC)
+  2004-2019: summer n 3,253 median -0.70 h, winter n 349 median +0.17 h; winter - summer +0.87 h [+0.77, +1.02] (local time: about +1 h)
+  2020-2023: summer n 478 median -0.65 h, winter n 93 median +0.00 h; winter - summer +0.65 h [+0.45, +0.98] (local time: about +1 h)
+  2024-2025: summer n 273 median -0.77 h, winter n 20 median -0.16 h; winter - summer +0.61 h [+0.03, +1.02] (local time: about +1 h)
+
+4. Position of the ICNF ignition relative to the first detection (native px; +di = ICNF south, +dj = ICNF east)
+  2004 - Nov 2017  n 2,696  di +0.71 [+0.70, +0.73]  dj +0.49 [+0.47, +0.51]  lag +0.17 h
+  2018-2019        n   123  di +0.17 [+0.09, +0.30]  dj +0.02 [-0.06, +0.09]  lag +0.18 h
+  2020-2023        n   321  di +0.22 [+0.18, +0.29]  dj +0.02 [-0.02, +0.06]  lag +0.23 h
+  2024-2025        n   232  di +0.19 [+0.14, +0.24]  dj +0.07 [+0.01, +0.11]  lag +0.12 h
+  2024-2025 minus 2020-2023, di: -0.026 [-0.115, +0.028]
+  2024-2025 minus 2020-2023, dj: +0.046 [-0.029, +0.110]
+  2024-2025 minus 2020-2023, lag_h: -0.117 [-0.250, +0.000]
+  by 3-h block of the first detection, 2024-2025 minus the same block of 2018-2023 (rule: |diff| > 0.25 px with an interval excluding 0)
+    00-03 UTC n  10 vs  23:  di +0.01 [-0.53, +0.53]  dj -0.18 [-0.43, +0.33]
+    03-06 UTC n   9 vs  12:  di +0.14 [-0.05, +0.66]  dj -0.00 [-0.37, +0.29]
+    06-09 UTC n  12 vs  13:  di -0.24 [-0.62, +0.46]  dj -0.04 [-0.43, +0.27]
+    09-12 UTC n  27 vs  38:  di -0.23 [-0.61, +0.19]  dj -0.01 [-0.27, +0.13]
+    12-15 UTC n  83 vs 163:  di -0.05 [-0.15, +0.05]  dj +0.05 [-0.04, +0.13]
+    15-18 UTC n  55 vs 122:  di -0.02 [-0.13, +0.10]  dj +0.13 [-0.06, +0.22]
+    18-21 UTC n  19 vs  41:  di +0.21 [-0.27, +0.48]  dj +0.06 [-0.21, +0.37]
+    21-24 UTC n  17 vs  32:  di -0.12 [-0.25, +0.18]  dj -0.03 [-0.16, +0.21]
+  rule exceeded: 0 time(s)
+
+5. Regression of the rebuilt files against commit 5a0f39d (2004-2019)
+  detections: 568,123 vs 568,123; identical columns: 12 of 12
+  static maps identical: True
+  fires: 10,911 of 10,911 found; rows differing {'start_utc': 0, 'burned_area_ha': 0, 'seen': 0, 'is_target': 0, 'isolated': 0, 'period': 0}; largest position difference 2.8e-14 px
+  labels: 11,145 of 11,145 found; largest position difference 2.8e-14 px
+  periods: 11,648 of 11,648 found; counts differing {'n_det': 0, 'n_det_pt': 0, 'n_targets': 0, 'n_ignore': 0}
+
+6. Hard-negative periods without a detection on a mainland (pt) cell
+  4 of 5,790: ['2021-09-08 06 UTC (train3)', '2021-09-08 18 UTC (train3)', '2022-03-20 18 UTC (train3)', '2022-03-21 06 UTC (train3)'] (excluded in train.CropSet)

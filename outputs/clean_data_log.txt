@@ -1,0 +1,26 @@
+ICNF
+  - ignic_ICNF.xlsx raw rows: 813,384
+  - ignic_ICNF.xlsx rows kept (before 2001 or without start): 330,413
+  - Registos_Incendios_SGIF_2001_2010.xlsx: 279,743 rows, alert years 2001-2010
+  - Registos_Incendios_SGIF_2011_2020.xlsx: 177,129 rows, alert years 2011-2020
+  - Registos_Incendios_SGIF_2021_2025.xlsx: 40,606 rows, alert years 2021-2025
+  - SGIF rows: 497,478; alert times 2001-01-05 02:00:00 -> 2025-12-31 18:10:00
+  - district: 37 raw spellings -> 18 after normalisation
+  - municipality: 645 raw spellings -> 278 after normalisation
+  - dropped 6 rows without start time
+  - dropped 6,452 exact duplicate rows
+  - end_local set to NaT for 22,410 rows (missing: 1557, sentinel <1980: 19299, end < start: 20,853)
+  - coordinates set to NaN for 32 rows outside mainland bbox
+  - start_utc: 42 rows NaT (time falls in a DST switch hour)
+  - end_utc: 46 rows NaT (time falls in a DST switch hour)
+  - first_intervention_utc: 17 rows NaT (time falls in a DST switch hour)
+  - rows without municipality: 1 (municipality_code kept as missing)
+  - clean rows: 821,433 (492,181 with valid coordinates; 492,213 from SGIF, 2001-01-05 -> 2025-12-31)
+  - SGIF rows with a known cause: 50.3%; rekindles: 29,374
+SEVIRI
+  - raw rows: 569,019
+  - dropped 896 exact duplicate rows
+  - clean rows: 568,123, 72,620 timestamps, 2004-01-19 15:30:00+00:00 -> 2019-12-31 23:45:00+00:00
+SEVIRI 2004-2025
+  - rows: 568,123 + 210,372 = 778,495, 2004-01-19 15:30:00+00:00 -> 2025-11-28 15:45:00+00:00
+written to data/processed/

@@ -2,14 +2,17 @@
 
 Design (draft):
   grid     native SEVIRI grid: row = y / SSD, col = x / SSD in the geostationary projection
-           (sub-satellite longitude 0 deg, valid for all of 2004-2019, see notes.md 4.2)
+           (sub-satellite longitude 0 deg, valid for all of 2004-2025, see notes.md 4.2 and 7.2)
   periods  12 h target periods [06, 18) and [18, 06) UTC; input = target period plus 6 h
            history before and 6 h after (24 h = 96 time steps of 15 min)
   targets  ICNF fires >= TARGET_HA starting in the target period and seen by SEVIRI
            (detection within 5 km in [start - 1 h, start + 6 h]); other fires >= IGNORE_HA
            and unseen target-size fires are 'ignore' regions (no loss)
   crops    CROP x CROP native pixels for training; full domain at inference
-  split    chronological: train 2004-2014, validation 2015-2016, test 2017-2019
+  split    train 2004-2014, validation 2015-2016, extra training blocks 2017-2019 (the test of
+           notes.md 6.17) and 2020-2023, test 2024-2025 (default of notes.md 8.8; to be revisited)
+  data     SEVIRI 2004-2025 (extract + LSA SAF download), ICNF SGIF export (notes.md 7-8);
+           labels for fires starting in LABEL_PERIOD
 
 Outputs: outputs/tiling_design_log.txt (stdout), figures/tiling/example_sample.png
 
@@ -35,15 +38,19 @@ PERIOD_START_UTC = 6          # target periods start at 06 and 18 UTC (diurnal m
 SEEN_KM, SEEN_PRE_H, SEEN_POST_H = 5, 1, 6
 CROPS = (16, 32, 64)
 CROP = 32
-SPLIT = {"train": range(2004, 2015), "val": range(2015, 2017), "test": range(2017, 2020)}
+SPLIT = {"train": range(2004, 2015), "val": range(2015, 2017), "train2": range(2017, 2020),
+         "train3": range(2020, 2024), "test": range(2024, 2026)}
+LABEL_PERIOD = ("2004-01-20", "2025-12-30")   # fires (and periods) fully inside SEVIRI and ICNF
+PERSISTENT_END = "2020-01-01"                 # persistent pixels from 2004-2019 only (notes.md 7.4-7.5)
+SEVIRI_FILE = "seviri_frp_2004_2025.parquet"  # src/clean_data.py
 
 def load():
-    sev = pd.read_parquet(PROC / "seviri_frp.parquet").sort_values("time_utc").reset_index(drop=True)
+    sev = pd.read_parquet(PROC / SEVIRI_FILE).sort_values("time_utc").reset_index(drop=True)
     r, c = native_rc(sev["lat"].values, sev["lon"].values)
     sev["row"], sev["col"] = np.round(r).astype(int), np.round(c).astype(int)
     icnf = pd.read_parquet(PROC / "icnf_fires.parquet")
     f = icnf[icnf["lat"].notna() & icnf["start_utc"].notna()
-             & icnf["start_utc"].between(pd.Timestamp(E.PERIOD[0], tz="UTC"), pd.Timestamp(E.PERIOD[1], tz="UTC"))
+             & icnf["start_utc"].between(pd.Timestamp(LABEL_PERIOD[0], tz="UTC"), pd.Timestamp(LABEL_PERIOD[1], tz="UTC"))
              & (icnf["burned_area_ha"] >= IGNORE_HA)].reset_index(drop=True)
     f["row_f"], f["col_f"] = native_rc(f["lat"].values, f["lon"].values)
     f["seen"] = seen(f, sev)
@@ -81,7 +88,7 @@ def grid_check(sev):
 
 
 def availability(f):
-    print("\nICNF fires 2004–2019 (valid coordinates) seen by SEVIRI "
+    print(f"\nICNF fires {LABEL_PERIOD[0][:4]}–{LABEL_PERIOD[1][:4]} (valid coordinates) seen by SEVIRI "
           f"(detection ≤ {SEEN_KM} km in [start − {SEEN_PRE_H} h, start + {SEEN_POST_H} h]):")
     rows = []
     for th in (10, 50, 100, 500):
@@ -98,8 +105,8 @@ def availability(f):
 
 def periods(sev, f):
     shift = pd.Timedelta(hours=PERIOD_START_UTC)
-    p0 = (pd.Timestamp(E.PERIOD[0], tz="UTC") - shift).floor("D") + shift
-    p1 = pd.Timestamp(E.PERIOD[1], tz="UTC")
+    p0 = (pd.Timestamp(LABEL_PERIOD[0], tz="UTC") - shift).floor("D") + shift
+    p1 = pd.Timestamp(LABEL_PERIOD[1], tz="UTC")
     allp = pd.date_range(p0, p1, freq=f"{PERIOD_H}h")
     # detections inside mainland Portugal during the input window of each period
     _, mainland = E.load_borders()
@@ -130,7 +137,7 @@ def periods(sev, f):
         "hard-negative periods": busy.groupby("split").size(),
     }).loc[list(SPLIT)]
     by["target fires [%]"] = (by["target fires"] / by["target fires"].sum() * 100).round(1)
-    print("\nChronological split:")
+    print("\nSplit:")
     print(by.to_string())
     return per
 

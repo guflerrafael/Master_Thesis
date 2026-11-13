@@ -1,23 +1,23 @@
 Clustering D = 6 km, gap = 6 h
-  events: 24,690
-  events ≥ 10 det: 6,620
-  det in events ≥ 10 [%]: 91.4
-  largest event [det]: 11,319
+  events: 31,873
+  events ≥ 10 det: 8,265
+  det in events ≥ 10 [%]: 92.0
+  largest event [det]: 20,985
   fires ≥100 ha with event [%]: 78.5
   … sharing event with another fire [%]: 30.8
   isolated: median own-event share [%]: 100.0
   isolated: own-event share ≥ 90 % [% fires]: 88.7
-  nuclei: 25,954
-  nuclei ≥ 10 det: 7,264
-  det in nuclei ≥ 10 [%]: 91.0
+  nuclei: 33,655
+  nuclei ≥ 10 det: 9,124
+  det in nuclei ≥ 10 [%]: 91.5
   largest nucleus [det]: 4,912
   fires ≥100 ha with nucleus [%]: 78.5
   … sharing nucleus with another fire [%]: 23.0
   isolated: median own-nucleus share [%]: 100.0
   isolated: own-nucleus share ≥ 90 % [% fires]: 87.2
-  events ≥ 10 det: median 26 det., 4.2 h; mostly persistent pixels (≥ 50 %): 409
-  events ≥ 10 det with ≥ 2 nuclei: 10.8 %; nuclei per event ≥ 10 det: median 1, max 44
-  nuclei ≥ 3 det: 14,346; born into an event that already burned (order > 1): 1,069; reappeared after a gap: 32.0 %; distance to nearest active detection at birth (order > 1): median 8.9 km
+  events ≥ 10 det: median 26 det., 4.2 h; mostly persistent pixels (≥ 50 %): 482
+  events ≥ 10 det with ≥ 2 nuclei: 11.5 %; nuclei per event ≥ 10 det: median 1, max 50
+  nuclei ≥ 3 det: 18,135; born into an event that already burned (order > 1): 1,492; reappeared after a gap: 34.6 %; distance to nearest active detection at birth (order > 1): median 8.9 km
 
 ICNF fires ≥ 100 ha (2004–2019) by position in their event:
                        fires  dist event [km]  dist nucleus [km]  ≤ 5 km event [%]  ≤ 5 km nucleus [%]  lag event [h]  lag nucleus [h]  nucleus shared [%]

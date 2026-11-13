@@ -1,20 +1,20 @@
-"""Single final evaluation of the final models on the TEST split 2017-2019 (notes.md 6.16).
+"""Single final evaluation of the final models on the TEST split (notes.md 6.16; split in tiling_design.SPLIT).
 
-Evaluates every checkpoint models/<folder>/<experiment>_s<seed>.pt of the given experiments and
-the nucleus-birth baseline with src/evaluate.py (k = 5 and 10 km): per seed, mean ± std over
-seeds, recall by isolation / size class / year, and AP per year (2017 = extreme year, still
-before the SEVIRI geo-referencing change; 2018-2019 after it, 6.11-6.12).
+Evaluates every checkpoint models/<folder>/<experiment>_s<seed>.pt of the given experiments, for every
+given folder, and the nucleus-birth baseline with src/evaluate.py (k = 5 and 10 km): per seed, mean ±
+std over seeds, recall by subgroup (isolation, size class, year; with the SGIF fields also rekindle,
+cause type, FWI quartile, land cover) and AP per year, for the default protocol and for the second
+protocol with rekindle records neutral (notes.md 8.4).
+
+The test of notes.md 6.17 (2017-2019) is now the training block 'train2'; its results stay in
+outputs/final/ and are never overwritten (--out must not be 'final').
 
 Safeguard: the test split is only used with --confirm-test. Without it the script evaluates the
 VALIDATION split instead, so the code path can be checked without looking at test numbers.
 
-Final models are trained first (train + val, no validation, last epoch):
-  python src/run_ablations.py --only cnn3d_final conv_final --seeds 0 1 2 --folder final \\
-      --extra="--train-splits train,val --no-val"
-Then, once:
-  python src/evaluate_test.py --confirm-test > outputs/final/test_log.txt
-Outputs: outputs/final/<split>_results_{per_seed,summary}.csv, <split>_results.md,
-figures/final/<split>_pr.png
+Example (the folders and the split of the next final evaluation are decided later, notes.md 8.8):
+  python src/evaluate_test.py --folders final final_2023 --out final_2023 --confirm-test
+Outputs: outputs/<out>/<split>_results_{per_seed,summary}.csv, <split>_results.md, figures/<out>/<split>_pr.png
 """
 import argparse
 
@@ -27,7 +27,7 @@ import pandas as pd
 import eda_figures as E
 from baselines import predictions as baseline_predictions
 from dataset import FireData
-from evaluate import evaluate
+from evaluate import REPORT_GROUPS, evaluate
 from train import get_device, load_model, predict
 
 KEYS = ["AP", "recall (all preds)", "best F1", "P @ best F1", "R @ best F1", "false alarms / day @ best F1",
@@ -36,13 +36,16 @@ GROUPS = ("isolated", "size_class", "year")
 
 
 def score(name, seed, preds, data, split, periods_by_year):
+    groups = GROUPS + (REPORT_GROUPS if "rekindle" in data.fires else ())
     rows, curves = [], {}
     for k in (5, 10):
-        res, curve, _ = evaluate(preds, data, split, k, groups=GROUPS)
+        res, curve, _ = evaluate(preds, data, split, k, groups=groups)
         r = {"method": name, "seed": seed, "k [km]": k, **{c: res[c] for c in KEYS},
              **{c: v for c, v in res.items() if c.startswith("recall |")}}
         for y, per in periods_by_year.items():
             r[f"AP | year={y}"] = evaluate(preds, data, split, k, groups=(), periods=per)[0]["AP"]
+        if len(data.rekindles):
+            r["AP | rekindles neutral"] = evaluate(preds, data, split, k, groups=(), neutral_rekindles=True)[0]["AP"]
         rows.append(r); curves[k] = curve
     return rows, curves
 
@@ -51,9 +54,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--experiments", nargs="*", default=["cnn3d_final", "conv_final"])
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
-    ap.add_argument("--folder", default="final")
+    ap.add_argument("--folders", nargs="*", default=["final"], help="checkpoint folders under models/")
+    ap.add_argument("--out", required=True, help="output folder under outputs/ and figures/ (never 'final')")
     ap.add_argument("--confirm-test", action="store_true", help="really evaluate on the test split (do this once)")
     args = ap.parse_args()
+    assert args.out != "final", "outputs/final holds the test results of notes.md 6.17; choose another --out"
     split = "test" if args.confirm_test else "val"
     if split == "val":
         print("NOTE: --confirm-test not given -> evaluating on the VALIDATION split (code check, no test numbers).")
@@ -67,16 +72,17 @@ def main():
     rows, curves = [], {}
     r, c = score("baseline: nucleus birth", -1, baseline_predictions(data)["birth"], data, split, periods_by_year)
     rows += r; curves[("baseline: nucleus birth", -1)] = c
-    for exp in args.experiments:
-        for seed in args.seeds:
-            name = f"{args.folder}/{exp}_s{seed}"
-            try:
-                model, cfg, ck = load_model(name, device)
-            except FileNotFoundError:
-                print(f"missing checkpoint models/{name}.pt, skipped"); continue
-            print(f"{name}: epoch {ck['epoch']}, trained on {ck['config'].get('train_splits', 'train')}", flush=True)
-            r, c = score(exp, seed, predict(model, data, periods, cfg, device), data, split, periods_by_year)
-            rows += r; curves[(exp, seed)] = c
+    for folder in args.folders:
+        for exp in args.experiments:
+            for seed in args.seeds:
+                name = f"{folder}/{exp}_s{seed}"
+                try:
+                    model, cfg, ck = load_model(name, device)
+                except FileNotFoundError:
+                    print(f"missing checkpoint models/{name}.pt, skipped"); continue
+                print(f"{name}: epoch {ck['epoch']}, trained on {ck['config'].get('train_splits', 'train')}", flush=True)
+                r, c = score(f"{folder}/{exp}", seed, predict(model, data, periods, cfg, device), data, split, periods_by_year)
+                rows += r; curves[(f"{folder}/{exp}", seed)] = c
 
     per_seed = pd.DataFrame(rows)
     num = [c for c in per_seed.columns if c not in ("method", "seed", "k [km]")]
@@ -84,7 +90,7 @@ def main():
     summary = g.mean().round(3).astype(str) + " ± " + g.std().fillna(0).round(3).astype(str)
     summary.insert(0, "seeds", per_seed.groupby(["method", "k [km]"], sort=False).size())
 
-    out = E.ROOT / "outputs" / args.folder
+    out = E.ROOT / "outputs" / args.out
     out.mkdir(parents=True, exist_ok=True)
     per_seed.to_csv(out / f"{split}_results_per_seed.csv", index=False)
     summary.to_csv(out / f"{split}_results_summary.csv")
@@ -96,7 +102,7 @@ def main():
     (out / f"{split}_results.md").write_text("```\n" + text + "```\n")
     print(text)
 
-    fig_dir = E.ROOT / "figures" / args.folder
+    fig_dir = E.ROOT / "figures" / args.out
     fig_dir.mkdir(parents=True, exist_ok=True)
     colours = {"baseline: nucleus birth": E.ORANGE}
     palette = iter([E.BLUE, E.AQUA, E.INK2])
@@ -114,7 +120,7 @@ def main():
     axes[0].set_ylabel("precision")
     fig.tight_layout()
     fig.savefig(fig_dir / f"{split}_pr.png", dpi=150); plt.close(fig)
-    print(f"written: outputs/{args.folder}/{split}_results*.csv/.md, figures/{args.folder}/{split}_pr.png (one curve per seed)")
+    print(f"written: outputs/{args.out}/{split}_results*.csv/.md, figures/{args.out}/{split}_pr.png (one curve per seed)")
 
 
 if __name__ == "__main__":

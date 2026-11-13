@@ -6,7 +6,9 @@ A sample is one 12 h target period:
   y  (h, w)       float32   max of Gaussians (sigma = SIGMA px) at every target ignition
   w  (h, w)       float32   loss weight: 1 inside the loss mask (mainland Portugal + 1 px),
                             0 outside and within IGNORE_R px of every 'ignore' fire, except
-                            within TARGET_CORE px of a target (targets win over ignore regions)
+                            within TARGET_CORE px of a target (targets win over ignore regions);
+                            optionally also 0 around every ICNF rekindle record of the period
+                            (rekindle_ignore, ablation of notes.md 8.6)
 for the full grid (177 x 106) or a crop (i0, j0, size). Framework-free (numpy).
 
 Run from the repository root (checks + example figure):
@@ -38,6 +40,9 @@ class FireData:
         self.fires = pd.read_parquet(root / "fires.parquet")
         self.labels = pd.read_parquet(root / "labels.parquet")
         self.periods = pd.read_parquet(root / "periods.parquet")
+        rk = root / "rekindles.parquet"     # missing for builds before the SGIF export (notes.md 8)
+        self.rekindles = pd.read_parquet(rk) if rk.exists() else pd.DataFrame(columns=["fire_id", "period", "lat", "lon", "i_f", "j_f"])
+        self._rk = {p: g for p, g in self.rekindles.groupby("period")}
         self.static = dict(np.load(root / "static.npz"))
         info = root / "build_info.json"     # missing for builds before the geo-referencing correction
         self.georef_fix = json.loads(info.read_text()).get("georef_fix", False) if info.exists() else False
@@ -56,9 +61,11 @@ class FireData:
     def first_slot(period):
         return (pd.Timestamp(period) - pd.Timedelta(hours=HISTORY_H)).value // (15 * 60 * 10**9)
 
-    def sample(self, period, crop=None, sigma=SIGMA, ignore_r=IGNORE_R, min_target_ha=None, births=False):
+    def sample(self, period, crop=None, sigma=SIGMA, ignore_r=IGNORE_R, min_target_ha=None, births=False,
+               rekindle_ignore=False):
         """Defaults reproduce the v1/v2 samples. births=True appends a 4th input channel (nucleus
-        birth flag); min_target_ha turns smaller targets into ignore regions."""
+        birth flag); min_target_ha turns smaller targets into ignore regions; rekindle_ignore=True
+        adds an ignore region (radius ignore_r) at every rekindle record of the period, of any size."""
         i0, j0, h, w = (0, 0, G.H, G.W) if crop is None else (crop[0], crop[1], crop[2], crop[2])
         s0 = self.first_slot(period)
         a, b = np.searchsorted(self._slot, [s0, s0 + T])
@@ -89,6 +96,9 @@ class FireData:
                 core |= d2 <= TARGET_CORE ** 2
             else:
                 wt[d2 <= ignore_r ** 2] = 0.0
+        if rekindle_ignore:
+            for q in self._rk.get(pd.Timestamp(period), self.rekindles.iloc[:0]).itertuples():
+                wt[(r - (q.i_f - i0)) ** 2 + (c - (q.j_f - j0)) ** 2 <= ignore_r ** 2] = 0.0
         wt[core] = self.static["pt_loss"][i0:i0 + h, j0:j0 + w][core]
         inside = lab["i_loc"].between(-0.5, h - 0.5) & lab["j_loc"].between(-0.5, w - 0.5)
         return x, y, wt, lab[inside]

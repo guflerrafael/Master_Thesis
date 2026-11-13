@@ -1,7 +1,8 @@
 """Native SEVIRI pixel grid of the FRP extract (notes.md 4.2).
 
 The pixel centres of the extract (irregular in lat/lon) lie on the native SEVIRI grid of the
-geostationary projection with sub-satellite longitude 0 deg (all of 2004-2019):
+geostationary projection with sub-satellite longitude 0 deg (all of 2004-2025; 2020-2025 checked
+against the product's own line/pixel indices, notes.md 7.2):
   row = y / SSD, col = x / SSD   (rounded; row increases northwards)
 Image arrays use index i = ROW_MAX - row (north at the top) and j = col - COL_MIN.
 """

@@ -5,8 +5,12 @@ Everything is stored sparsely; src/dataset.py builds the dense tensors of a samp
 Outputs (data/processed/model/):
   detections.parquet  all SEVIRI detections with image indices (i, j) on the native grid and
                       the 15-min slot; plus event_id / nucleus_id / persistent / in_pt
-  fires.parquet       ICNF fires >= IGNORE_HA (2004-2019, valid coordinates, UTC start) with
-                      continuous image position (i_f, j_f), seen flag, period, split, isolation
+  fires.parquet       ICNF fires >= IGNORE_HA (start in tiling_design.LABEL_PERIOD, valid coordinates,
+                      UTC start) with continuous image position (i_f, j_f), seen flag, period, split,
+                      isolation; plus SGIF fields for reporting only (rekindle, cause, FWI, land cover)
+  rekindles.parquet   every ICNF rekindle record (any size) in LABEL_PERIOD with its period and the
+                      position in the sensor frame of that period: second evaluation protocol and the
+                      --rekindle-ignore ablation (notes.md 8.4, 8.6)
   labels.parquet      (period, fire) pairs with role 'target' or 'ignore'; i_f / j_f here are the
                       ignition position in the SEVIRI *sensor* frame of that period (see below)
   periods.parquet     one row per 12 h target period: split, detections, targets, ignores
@@ -34,8 +38,8 @@ from scipy.ndimage import binary_dilation
 import eda_figures as E
 import grid as G
 from proximity_analysis import count_neighbours
-from tiling_design import (HISTORY_H, IGNORE_HA, PERIOD_H, PERIOD_START_UTC, SPLIT, TAIL_H, TARGET_HA,
-                           seen)
+from tiling_design import (HISTORY_H, IGNORE_HA, LABEL_PERIOD, PERIOD_H, PERIOD_START_UTC, PERSISTENT_END, SPLIT,
+                           SEVIRI_FILE, TAIL_H, TARGET_HA, seen)
 
 PROC = E.PROC
 OUT = PROC / "model"
@@ -43,6 +47,7 @@ BOUNDARY_H = 1                 # seen target-size fires starting within 1 h outs
 ISOLATION = (10, 20, 72)       # no other fire >= 10 ha within 20 km and +-72 h (as in 3.1)
 SIZE_BINS = [10, 50, 100, 500, 1000, np.inf]
 SIZE_LABELS = ["10–50", "50–100", "100–500", "500–1k", "≥1k"]
+REPORT_COLUMNS = ["sgif_code", "rekindle", "cause_type", "fwi", "area_forest_ha", "area_shrub_ha", "area_agric_ha"]
 
 
 def period_of(t):
@@ -59,11 +64,20 @@ def detections():
     return d
 
 
+def split_of(years):
+    out = years.map({y: k for k, ys in SPLIT.items() for y in ys})
+    assert out.notna().all(), f"years without a split: {sorted(set(years[out.isna()]))}"
+    return out
+
+
+def in_label_period(icnf):
+    return (icnf["lat"].notna() & icnf["start_utc"].notna()
+            & icnf["start_utc"].between(pd.Timestamp(LABEL_PERIOD[0], tz="UTC"), pd.Timestamp(LABEL_PERIOD[1], tz="UTC")))
+
+
 def fires(det, georef_fix=True):
     icnf = pd.read_parquet(PROC / "icnf_fires.parquet")
-    f = icnf[icnf["lat"].notna() & icnf["start_utc"].notna()
-             & icnf["start_utc"].between(pd.Timestamp(E.PERIOD[0], tz="UTC"), pd.Timestamp(E.PERIOD[1], tz="UTC"))
-             & (icnf["burned_area_ha"] >= IGNORE_HA)].reset_index(drop=True)
+    f = icnf[in_label_period(icnf) & (icnf["burned_area_ha"] >= IGNORE_HA)].reset_index(drop=True)
     f["i_f"], f["j_f"] = G.latlon_to_ij(f["lat"].values, f["lon"].values)
     if georef_fix:     # compare ICNF and SEVIRI in the same (sensor) frame
         lat_s, lon_s = G.true_to_sensor_latlon(f["lat"].values, f["lon"].values, f["start_utc"])
@@ -72,13 +86,24 @@ def fires(det, georef_fix=True):
         f["seen"] = seen(f, det)
     f["period"] = period_of(f["start_utc"])
     f["year"] = f["start_utc"].dt.year
-    f["split"] = f["year"].map({y: k for k, ys in SPLIT.items() for y in ys})
+    f["split"] = split_of(f["year"])
     ha, km, h = ISOLATION
     f["isolated"] = count_neighbours(f, f[f["burned_area_ha"] >= ha], [km], h)[:, 0] == 0
     f["size_class"] = pd.cut(f["burned_area_ha"], SIZE_BINS, labels=SIZE_LABELS, right=False)
     f["is_target"] = (f["burned_area_ha"] >= TARGET_HA) & f["seen"]
     return f[["fire_id", "start_utc", "end_utc", "lat", "lon", "i_f", "j_f", "burned_area_ha", "size_class",
-              "municipality", "district", "seen", "is_target", "isolated", "period", "year", "split"]]
+              "municipality", "district", "seen", "is_target", "isolated", "period", "year", "split"] + REPORT_COLUMNS]
+
+
+def rekindles(georef_fix=True):
+    """Every rekindle record of the label period, of any size (fires.parquet holds only fires >= IGNORE_HA)."""
+    icnf = pd.read_parquet(PROC / "icnf_fires.parquet")
+    r = icnf[in_label_period(icnf) & icnf["rekindle"].fillna(False).astype(bool)].reset_index(drop=True)
+    r = r[["fire_id", "start_utc", "lat", "lon", "burned_area_ha"]].assign(period=period_of(r["start_utc"]))
+    r["i_f"], r["j_f"] = G.latlon_to_ij(r["lat"].values, r["lon"].values)
+    if georef_fix:     # sensor frame of the record's period, as labels()
+        r["i_f"], r["j_f"] = G.true_to_sensor_ij(r["i_f"].values, r["j_f"].values, r["period"])
+    return r
 
 
 def labels(f, georef_fix=True):
@@ -101,9 +126,9 @@ def labels(f, georef_fix=True):
 
 def periods(det, lab):
     shift = pd.Timedelta(hours=PERIOD_START_UTC)
-    p0 = (pd.Timestamp(E.PERIOD[0], tz="UTC") - shift).floor("D") + shift
-    per = pd.DataFrame({"period": pd.date_range(p0, pd.Timestamp(E.PERIOD[1], tz="UTC"), freq=f"{PERIOD_H}h")})
-    per["split"] = per["period"].dt.year.map({y: k for k, ys in SPLIT.items() for y in ys})
+    p0 = (pd.Timestamp(LABEL_PERIOD[0], tz="UTC") - shift).floor("D") + shift
+    per = pd.DataFrame({"period": pd.date_range(p0, pd.Timestamp(LABEL_PERIOD[1], tz="UTC"), freq=f"{PERIOD_H}h")})
+    per["split"] = split_of(per["period"].dt.year)
     t = det["time_utc"].values.astype("datetime64[ns]").astype("int64")
     a = (per["period"] - pd.Timedelta(hours=HISTORY_H)).values.astype("datetime64[ns]").astype("int64")
     b = (per["period"] + pd.Timedelta(hours=PERIOD_H + TAIL_H)).values.astype("datetime64[ns]").astype("int64")
@@ -134,6 +159,7 @@ def main():
     det = detections()
     f = fires(det, georef_fix)
     lab = labels(f, georef_fix)
+    rk = rekindles(georef_fix)
     print(f"Geo-referencing correction: {'ON' if georef_fix else 'OFF'}"
           + (f" (labels before {G.GEOREF_CHANGE} moved {G.GEOREF_SHIFT_PX} px north-west into the sensor frame)" if georef_fix else ""))
     per = periods(det, lab)
@@ -155,17 +181,23 @@ def main():
     print("\nPeriods by split:")
     print(per.groupby("split").agg(periods=("period", "size"), with_detections=("n_det", lambda x: (x > 0).sum()),
                                    with_targets=("n_targets", lambda x: (x > 0).sum()), targets=("n_targets", "sum"))
-          .loc[list(SPLIT)].to_string())
+          .reindex(list(SPLIT)).fillna(0).astype(int).to_string())
+    print(f"\nRekindle records (any size, valid coordinates) in the label period: {len(rk):,}; "
+          f"targets with a known cause: {f.loc[f['is_target'], 'rekindle'].notna().sum():,}, of which rekindles: "
+          f"{int(f.loc[f['is_target'], 'rekindle'].sum()):,}")
 
     det.to_parquet(OUT / "detections.parquet", index=False)
     f.to_parquet(OUT / "fires.parquet", index=False)
     lab.to_parquet(OUT / "labels.parquet", index=False)
     per.to_parquet(OUT / "periods.parquet", index=False)
+    rk.to_parquet(OUT / "rekindles.parquet", index=False)
     np.savez_compressed(OUT / "static.npz", **st)
     info = {"georef_fix": georef_fix, "georef_change": G.GEOREF_CHANGE, "georef_shift_px": G.GEOREF_SHIFT_PX,
-            "targets": int(f["is_target"].sum()), "labels": len(lab)}
+            "targets": int(f["is_target"].sum()), "labels": len(lab), "label_period": list(LABEL_PERIOD),
+            "persistent_before": PERSISTENT_END, "seviri_file": SEVIRI_FILE, "detections": len(det),
+            "split": {k: [min(v), max(v)] for k, v in SPLIT.items()}}
     (OUT / "build_info.json").write_text(json.dumps(info, indent=1))
-    print(f"\nwritten: {OUT.relative_to(E.ROOT)}/ (detections, fires, labels, periods .parquet, static.npz, build_info.json)")
+    print(f"\nwritten: {OUT.relative_to(E.ROOT)}/ (detections, fires, labels, periods, rekindles .parquet, static.npz, build_info.json)")
 
 
 if __name__ == "__main__":

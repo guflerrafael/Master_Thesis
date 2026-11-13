@@ -2,6 +2,35 @@
  "georef_fix": true,
  "georef_change": "2017-12-01",
  "georef_shift_px": 0.5,
- "targets": 2821,
- "labels": 11145
+ "targets": 3374,
+ "labels": 13322,
+ "label_period": [
+  "2004-01-20",
+  "2025-12-30"
+ ],
+ "persistent_before": "2020-01-01",
+ "seviri_file": "seviri_frp_2004_2025.parquet",
+ "detections": 778495,
+ "split": {
+  "train": [
+   2004,
+   2014
+  ],
+  "val": [
+   2015,
+   2016
+  ],
+  "train2": [
+   2017,
+   2019
+  ],
+  "train3": [
+   2020,
+   2023
+  ],
+  "test": [
+   2024,
+   2025
+  ]
+ }
 }

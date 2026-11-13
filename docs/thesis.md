@@ -173,7 +173,7 @@ For the **292 events ≥1,000 ha with coordinates in 2004–2019** I searched SE
 5. **Temporal framing.** "From the earliest detectable stage onwards": sequence length, how many 15-min steps after first detection, handling of sparse/irregular detections (gaps due to cloud or low FRP).
 6. **Cross-validation.** Draft: chronological split train 2004–2014 / val 2015–2016 / test 2017–2019 (§14); possibly leave-one-year-out in addition. Split by year to avoid leakage between adjacent pixels/time steps of the same fire and between simultaneous fires.
 7. **Environmental covariates** (not yet obtained): DEM, CORINE/land cover, fuel maps, ERA5-Land hourly meteorology (and possibly FIRMS MODIS/VIIRS active fires for finer spatial detail). Grid: the native SEVIRI grid (reconstructed exactly, §14).
-8. **Data currency.** FRP data end in 2019, ICNF in 2023; the supervisor notes the files are outdated — extend SEVIRI FRP (e.g. LSA SAF FRP-PIXEL product / FIRMS) to 2020–2023 if possible.
+8. **Data currency.** FRP data end in 2019, ICNF in 2023; the supervisor notes the files are outdated — extend SEVIRI FRP (e.g. LSA SAF FRP-PIXEL product / FIRMS) to 2020–2023 if possible. Update 2026-11-13: LSA SAF FRP-PIXEL 2020–2025 and the ICNF SGIF export 2001–2025 are connected; the pipeline runs on 2004–2025 (`notes.md` §7–8).
 9. **Spain overlap.** Hotspots outside Portugal have no labels — draft: keep as input context, exclude from the loss (§14).
 10. **Baselines.** First-hotspot centroid, FRP-weighted centroid of the first *n* detections, earliest-cluster + backward fire-spread heuristic; compare against ConvLSTM and CNN–Transformer.
 11. **Interpretability.** Planned XAI (saliency / attention / integrated gradients) — to define after the first model works.

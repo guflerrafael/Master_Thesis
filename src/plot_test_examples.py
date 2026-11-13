@@ -1,4 +1,8 @@
-"""Predicted ignitions vs. ICNF targets of a final model on the TEST split 2017-2019 (notes.md 6.17).
+"""Predicted ignitions vs. ICNF targets of a final model on one split (notes.md 6.17-6.18).
+
+The figures of 6.18 show the test of that time, 2017-2019, which is now the training block 'train2'
+(tiling_design.SPLIT): reproduce them with --split train2 --out final. The current test split is only
+used with --confirm-test, and never written to outputs/final or figures/final.
 
 Descriptive figures made after the single locked test evaluation (evaluate_test.py); nothing here
 is used for any model choice. Periods are chosen by fixed rules (random choice with seed 0 inside
@@ -15,8 +19,9 @@ probability with the predicted points by match status, (c) ICNF targets, target 
 loss mask. All positions in the sensor frame (labels and peaks before the shift back, 6.12).
 
 Run from the repository root:
-  .venv/bin/python src/plot_test_examples.py --name final/cnn3d_final_s0
-Outputs: figures/final/test_examples_{1,2}.png, outputs/final/test_examples.csv
+  .venv/bin/python src/plot_test_examples.py --name final/cnn3d_final_s0 --split train2 --out final   (6.18)
+Outputs: figures/<out>/<split>_examples_{1,2}.png, outputs/<out>/<split>_examples.csv
+(for --split train2 --out final the 6.18 names test_examples_{1,2}.png / test_examples.csv)
 """
 import argparse
 
@@ -50,14 +55,14 @@ def points(maps, georef_fix):
     return pd.concat(rows, ignore_index=True)
 
 
-def outcomes(data, scored, thr):
-    """Per test period: targets, hits, misses, false alarms at the threshold; per target: hit or not."""
+def outcomes(data, scored, thr, split):
+    """Per period of the split: targets, hits, misses, false alarms at the threshold; per target: hit or not."""
     above = scored[scored["score"] >= thr]
     hit_ids = set(above.loc[above["status"] == "tp", "fire_id"])
     lab = data.labels[(data.labels["role"] == "target")]
-    lab = lab[lab["period"].isin(set(data.periods.loc[data.periods["split"] == "test", "period"]))].copy()
+    lab = lab[lab["period"].isin(set(data.periods.loc[data.periods["split"] == split, "period"]))].copy()
     lab["hit"] = lab["fire_id"].isin(hit_ids)
-    per = data.periods[data.periods["split"] == "test"].set_index("period")
+    per = data.periods[data.periods["split"] == split].set_index("period")
     per["hits"] = lab.groupby("period")["hit"].sum().reindex(per.index, fill_value=0)
     per["misses"] = per["n_targets"] - per["hits"]
     per["false_alarms"] = above[above["status"] == "fp"].groupby("period").size().reindex(per.index, fill_value=0)
@@ -145,7 +150,7 @@ def plot_rows(cases, data, maps, pts_all, thr, name, out, bi, bj, cfg):
                               f"{len(tg)} targets: {n_hit} hit, {len(tg) - n_hit} missed; {n_fa} false alarms", fontsize=9)
     axes[0, 1].legend(loc="lower left", fontsize=7, framealpha=0.9)
     axes[0, 2].legend(loc="lower left", fontsize=7, framealpha=0.9)
-    fig.suptitle(f"{name} on the test split 2017–2019: prediction vs. ICNF target; one cell ≈ 3.2 × 4.5 km, sensor frame",
+    fig.suptitle(f"{name}: prediction vs. ICNF target; one cell ≈ 3.2 × 4.5 km, sensor frame",
                  fontsize=11, x=0.01, ha="left")
     fig.savefig(out, dpi=150); plt.close(fig)
     print(f"figure: {out.relative_to(E.ROOT)}")
@@ -154,23 +159,28 @@ def plot_rows(cases, data, maps, pts_all, thr, name, out, bi, bj, cfg):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="final/cnn3d_final_s0")
+    ap.add_argument("--split", default="train2", help="train2 = the test years of 6.17 (2017-2019)")
+    ap.add_argument("--out", required=True, help="output folder under outputs/ and figures/")
+    ap.add_argument("--confirm-test", action="store_true", help="needed for --split test")
     args = ap.parse_args()
+    assert args.split != "test" or args.confirm_test, "the test split needs --confirm-test"
+    assert not (args.split == "test" and args.out == "final"), "outputs/final holds the results of notes.md 6.17"
     device = get_device()
     model, cfg, _ = load_model(args.name, device)
     data = FireData()
     assert data.georef_fix, "expects the geo-referencing-corrected build (6.12)"
 
-    periods = data.periods.loc[(data.periods["split"] == "test") & (data.periods["n_det"] > 0), "period"]
+    periods = data.periods.loc[(data.periods["split"] == args.split) & (data.periods["n_det"] > 0), "period"]
     maps = predict_maps(model, data, periods, cfg, device)
     pts = points(maps, data.georef_fix)
-    res, curve, scored = evaluate(pts[["period", "lat", "lon", "score"]], data, "test", K_KM)
+    res, curve, scored = evaluate(pts[["period", "lat", "lon", "score"]], data, args.split, K_KM)
     f1 = 2 * curve["precision"] * curve["recall"] / (curve["precision"] + curve["recall"]).clip(lower=1e-9)
     thr = float(curve["score"].iloc[int(f1.values.argmax())])
-    print(f"{args.name}: test AP @ {K_KM} km {res['AP']:.3f}; best-F1 threshold p ≥ {thr:.3f}")
+    print(f"{args.name}: {args.split} AP @ {K_KM} km {res['AP']:.3f}; best-F1 threshold p ≥ {thr:.3f}")
 
     # match status back onto the sensor-frame points (evaluate keeps the row index of its input)
     pts = pts.join(scored[["status", "fire_id", "err_km"]], how="inner")
-    per, tlab = outcomes(data, scored, thr)
+    per, tlab = outcomes(data, scored, thr, args.split)
     tlab = tlab.merge(data.fires[["fire_id", "lat", "lon"]], on="fire_id")
     cases = choose_cases(per, tlab)
     for label, p in cases:
@@ -179,15 +189,15 @@ def main():
 
     _, mainland = E.load_borders()
     bi, bj = G.latlon_to_ij(np.array(mainland.exterior.xy[1]), np.array(mainland.exterior.xy[0]))
-    fig_dir = E.ROOT / "figures" / "final"
-    fig_dir.mkdir(parents=True, exist_ok=True)
+    fig_dir, out_dir = E.ROOT / "figures" / args.out, E.ROOT / "outputs" / args.out
+    fig_dir.mkdir(parents=True, exist_ok=True); out_dir.mkdir(parents=True, exist_ok=True)
+    stem = "test" if (args.split, args.out) == ("train2", "final") else args.split   # 6.18 file names
     tag = args.name.split("/")[-1]
-    plot_rows(cases[:4], data, maps, pts, thr, tag, fig_dir / "test_examples_1.png", bi, bj, cfg)
-    plot_rows(cases[4:], data, maps, pts, thr, tag, fig_dir / "test_examples_2.png", bi, bj, cfg)
+    plot_rows(cases[:4], data, maps, pts, thr, tag, fig_dir / f"{stem}_examples_1.png", bi, bj, cfg)
+    plot_rows(cases[4:], data, maps, pts, thr, tag, fig_dir / f"{stem}_examples_2.png", bi, bj, cfg)
     pd.DataFrame([dict(case=l, period=p, **per.loc[p, ["n_targets", "hits", "misses", "false_alarms"]].to_dict())
-                  for l, p in cases]).assign(model=tag, threshold=thr).to_csv(
-        E.ROOT / "outputs" / "final" / "test_examples.csv", index=False)
-    print("written: outputs/final/test_examples.csv")
+                  for l, p in cases]).assign(model=tag, threshold=thr).to_csv(out_dir / f"{stem}_examples.csv", index=False)
+    print(f"written: outputs/{args.out}/{stem}_examples.csv")
 
 
 if __name__ == "__main__":

@@ -6,9 +6,12 @@ This document serves as a basis for the write up. All notes (more specifically a
 
 ```
 data/raw/          ignic_ICNF.xlsx, FRP_SEVIRI_PT_2004_2019.mat   (as received, never modified)
-data/processed/    icnf_fires.parquet, seviri_frp.parquet          (src/clean_data.py)
+                   msg_frp_pt/<year>/<yyyymmdd>.parquet, inventory.csv (src/download_msg_frp.py, not versioned, see 7)
+                   icnf/Registos_Incendios_SGIF_{2001_2010,2011_2020,2021_2025}.xlsx (ICNF SGIF export 2001-2025, not versioned, see 8)
+data/processed/    icnf_fires.parquet, seviri_frp.parquet (2004-2019), seviri_frp_2004_2025.parquet (src/clean_data.py)
+                   seviri_frp_2020_2025.parquet                    (src/download_msg_frp.py --merge, input of clean_data.py)
                    seviri_frp_events.parquet, seviri_events.parquet, seviri_nuclei.parquet (src/cluster_hotspots.py)
-data/processed/model/ sample index for the heatmap model: detections, fires, labels, periods .parquet, static.npz (src/build_dataset.py)
+data/processed/model/ sample index for the heatmap model: detections, fires, labels, periods, rekindles .parquet, static.npz (src/build_dataset.py)
 data/external/     ne_10m_admin_0_countries.zip (country borders, see 2.2)
 outputs/profiling/ ydata-profiling reports in raw/ and processed/  (src/eda.py)
 outputs/           *_log.txt, cluster_hotspots_sensitivity.txt     (numbers printed by the scripts)
@@ -22,6 +25,7 @@ figures/model/    model vs. baseline precision-recall curves      (src/evaluate_
 models/           trained checkpoints (*.pt)                      (src/train.py)
 src/               all code
 docs/              thesis.md (context), notes.md (this file), literature.md (literature review), data_pipeline.md (current pipeline, technical reference), model_review.md
+docs/lsasaf/       LSA SAF PUM and ATBD of the MTG FCI product LSA-509 (not the MSG product used here, see 7.1)
 ```
 
 Environment: Python 3.11, `python -m venv .venv && .venv/bin/pip install -r requirements.txt` (only packages imported by `src/`, pinned).
@@ -48,6 +52,10 @@ Run from the repository root, in this order:
 19. `.venv/bin/python src/plot_overview_diagrams.py`: overview figures of the data pipeline (`figures/pipeline/pipeline_overview.png/.pdf`) and one per model (`figures/model/model_convlstm.png/.pdf`, `model_cnn3d.png/.pdf`; use the checkpoints `ablations_georef/conv_final_s0` and `cnn3d_final_s0`)
 20. `.venv/bin/python src/plot_test_examples.py --name final/cnn3d_final_s0`: predicted vs. ICNF ignition maps of the final model on the test split, cases chosen by fixed rules (6.18)
 21. `.venv/bin/python src/time_target_analysis.py > outputs/time_target_analysis.txt`: can the ignition time be a target? (6.19)
+22. `.venv/bin/python src/download_msg_frp.py`, then `src/download_msg_frp.py --merge`: SEVIRI 2020–2025 from LSA SAF (needs a login), before step 1 (7)
+23. `.venv/bin/python src/check_new_years.py > outputs/new_years_check.txt`: data checks of the extension to 2020–2025 and regression against the 2004–2019 build, after step 9 (7–8)
+
+Since 2026-11-13 steps 1, 7, 9 and 10 use 2004–2025 (8.8); `src/clean_data.py` reads the ICNF SGIF export (`data/raw/icnf/`), which is not versioned.
 
 ## 1. Data
 
@@ -1219,3 +1227,367 @@ Consequences:
 - The case for the mask as a companion to memory models (6.6) is weaker: most reappearing false alarms follow gaps with a clear view.
 - Report as a tested negative result. The table above explains part of the unseen fires (limitation in 6.2, 6.17).
 - Next for precision: why fires reappear after clear gaps, and errors in busy periods.
+
+## 7. SEVIRI 2020–2025
+
+Status 2026-11-02: **analysis and plan only.** No file in `src/` has changed and the pipeline still stops at 2019. The numbers come from scratch scripts, not yet in the repository; step 6 of the plan (7.6) moves them to `src/check_new_years.py`. The checks use SEVIRI and ICNF only. No model or baseline has been scored on 2020–2025.
+
+Update, same day: the professor can obtain ICNF for 2024–2025, so 2024–2025 becomes the planned test and 2020–2023 moves to training (7.5). The file is not in the repository yet.
+
+Update 2026-11-13: the ICNF data arrived as an SGIF export for 2001–2025. Audit and plan in §8, which replaces stage B of 7.6. Stages A and B are implemented (8.8), except step 0 (needs the LSA SAF login). The split of 7.5 is used as a default and is to be revisited.
+
+### 7.1 The new data
+
+- Source: LSA SAF FRP-PIXEL (LSA-502), one full-disk file per 15-min slot, cropped to lat 36–44, lon −10 to −6 by `src/download_msg_frp.py`.
+- Raw: `data/raw/msg_frp_pt/<year>/<yyyymmdd>.parquet`, 2,192 day files with 25 product fields plus `time_utc`. `inventory.csv` has per day: files, missing slots, satellite, algorithm version, quality flag.
+- Merged: `data/processed/seviri_frp_2020_2025.parquet`, 210,372 rows. It is written by `download_msg_frp.py --merge`, not by `clean_data.py`, with the same rules and the same schema as `seviri_frp.parquet`. No row was dropped (raw = merged). First detection 2020-01-01 04:00, last 2025-11-28 15:45 UTC.
+
+| Year | Detections | Slots missing | Satellite (inventory) | ICNF fires ≥ 50 ha | Targets (≥ 50 ha, seen) |
+|---|---|---|---|---|---|
+| 2020 | 19,138 | 109 | MSG4 (MSG2 on 13–27 Jan) | 109 | 90 |
+| 2021 | 6,619 | 123 | MSG4 (MSG2 on part of 19–20 Dec) | 83 | 52 |
+| 2022 | 44,509 | 31 | MSG4 (MSG2 on 17–31 Jan) | 173 | 130 |
+| 2023 | 13,272 | 18 | MSG4 → MSG3 on 21 Mar | 78 | 49 |
+| 2024 | 34,254 | 132 (96 = all of 9 May) | MSG3 (MSG4 on 17–20 Aug) | 128 (SGIF, §8) | 111 |
+| 2025 | 92,580 | 43 | MSG3 (MSG4 on part of 11–12 Nov) | 152 (SGIF, §8) | 121 |
+
+Main facts:
+- **The ICNF file `ignic_ICNF.xlsx` ends on 2023-12-30.** 2024–2025 hold 60 % of the new detections. Their labels come from the SGIF export of 2026-11-13 (§8): 232 targets, burned area 137,700 and 270,700 ha, in line with the national reports (about 136,000 and 271,000 ha, seen in search results).
+- **The labels of 2020–2023 add 321 targets**, +11 % on the current 2,821. This is below the "15–25 %" estimated in `model_review.md` §6.5.
+- **Algorithm:** `PRODUCT_ALGORITHM_VERSION` is 2.4.0 and `OVERALL_QUALITY_FLAG` is OK on every day with files, including the three test days of July 2019. So the files show no algorithm change inside 2020–2025 or at the join with the old extract. When 2.4.0 started is not known. The versions 2.0–2.3 in 6.20 come from the Quality product and lie inside the old extract's period.
+- **The documents in `docs/lsasaf/` describe a different product.** The PUM (`SAF/LAND/IPMA/PUM_MTFRP/0.2`) and ATBD (`SAF/LAND/KCL/ATBD_FRP_MTG/1.1`) cover LSA-509, the MTG FCI product (1 km, 10 min, NetCDF/CSV). Our data is the MSG SEVIRI product: the download URL is `PRODUCTS/MSG/FRP-PIXEL/HDF5`, the files report MSG2/3/4, and they are 15-min HDF5 on the 3 km grid. So these documents do not apply to our files and do not date version 2.4.0; that needs the PUM of LSA-502. What they say about SEVIRI, in passing: SEVIRI significantly undercounts fires below about 40 MW compared with MODIS (ATBD §1), the water-edge test also hides true fires (ATBD §3.3, as measured in 6.20), and the earlier SEVIRI algorithm also masked cloud-edge pixels, which was later removed (ATBD §3.3, undated). The last point is a real algorithm change, but we cannot place it in time; the data show no step at the 2019/2020 join.
+- **Satellite:** the only real changes in the labelled new years are MSG4 → MSG3 on 2023-03-21 and the short MSG2 windows. The swap date matches EUMETSAT notices relayed by [OSI SAF](https://osi-saf.eumetsat.int/community/list-of-service-messages/meteosat-10meteosat-11-swap-operations-planned-21032023) and [NOAA](https://ospo.noaa.gov/data/messages/2023/02/MSG_20230228_2121.html) (search results, pages not opened). A [news report](https://news.satnews.com/2025/06/29/meteosat-12-satellite-takes-over-from-meteosat-10-in-delivering-europes-prime-service) says Meteosat-12 took over the prime service in June 2025, but the FRP-PIXEL files still report MSG3 until the end of 2025.
+
+### 7.2 Alignment checks
+
+| Question | Test | Result | Consequence |
+|---|---|---|---|
+| Same lat/lon for the same pixel? | Native pixels active in both sources | 4,789 shared, 0 differences. Union 9,017 pixels, 0 collisions. 615 pixels are new (180 in mainland Portugal, 2.7 % of the new rows) | Pixel identity by (lat, lon) stays valid in `cluster()` and `pixel_stats()` |
+| Same grid? | `native_rc` against the product's own indices | `ABS_LINE = 1857 − row` and `ABS_PIXEL = 1857 + col` for all 210,372 rows and all satellites. Within ±0.25 px of a node: 94–100 % per year and axis (old extract 93–99 %). Max residual 0.42 px, same as before | `grid.py` needs no change |
+| Inside the model grid? | Image indices | i 0–171, j 2–105 → 0 rows outside 177 × 106. Lat 36.54–43.58, lon −9.33 to −6.00, inside the old extent although the download box is wider | The assert in `build_dataset.detections` holds; no cropping needed |
+| Same product at the join? | Rows per day on 2019-07-20/21/22 (`inventory.csv`) against the old extract | 564 / 794 / 506 in both | Same product and same footprint on those days. **Only day counts:** those day files are gone, so FRP and confidence were not compared row by row (step 0) |
+| Same time label? | Same counts with the extract's labels shifted by ±1 to ±4 slots | Only shift 0 matches on all three days | The extract's `TIME` is the slot of the LSA SAF file name. `ACQTIME` is slot + 10–11 min on all satellites |
+| ICNF still local time in 2020–2023? | DST test of 1.4 (winter − summer median lag) | +0.65 h [0.45, 0.98], n = 571; 2004–2019 +0.87 h [0.77, 1.02] | The Europe/Lisbon conversion still applies |
+| Detection sensitivity changed? | Seen share by size; FRE vs. burned area (log-log fit 2004–2019: slope 1.10, r 0.97, residual SD 0.105) | Seen share 50–100 ha 0.53–0.76 (before 0.45–0.82), 100–500 ha 0.71–0.82 (0.60–0.88), ≥ 500 ha 0.90–1.00 (0.68–1.00). FRE residuals −0.03, −0.17, +0.10, +0.13 | No step change. The 2021 residual is the largest, 1.6 SD |
+| FRP and confidence channels? | Ranges per year | Confidence 1–100. FRP 8.3–1,147 MW; 21 rows above 1,100 MW (14 in 2022, 7 in 2025). Median FRP 2020–2023 66–95 MW (before 55–95), 2024–2025 110–115 MW | Channel maximum 1.006 instead of 1. Keep `FRP_NORM`, so old checkpoints stay valid. The 2024–2025 medians cannot be checked against ICNF |
+| Missing scans? | Inventory; whole-domain empty slots between slots with ≥ 10 detections (6.16) | 0.05–0.38 % of slots missing per year; in June–October 57, 49, 19, 4, 30 and 8 slots (2020–2025). Largest fire-season gaps: nights of 2020-09-20/21 and 2021-10-11/12, 19 slots on 2024-08-17. Empty slots 2020–2023: 0, 1, 2, 0 (2004–2017: 105 in total) | Fewer gaps than in the old extract. No action |
+| ICNF conventions? | Per-year audit | 1 invalid coordinate and 0 NaT starts in 2020–2023; start-time precision unchanged. Fires at a shared point (same year, all sizes): 4–5 %, against 17–59 % in 2012–2017 | Positions look less generic, so label noise may be lower than in the old years. Scores on the new years are not directly comparable with 6.17 |
+
+### 7.3 Ground position: no new geo-referencing offset
+
+The lat/lon table cannot show a ground shift, because the 2017 offset did not appear in it either (6.11). So the test of 6.11 is repeated on all targets: ICNF true position minus the FRP-weighted centroid of the first detection slot within 2 cells, in [start − 1 h, start + 6 h] (as `plot_presentation_figures.georef_offset_by_year`). Median in native pixels, with bootstrap 95 % intervals; +i = ICNF south of the detection, +j = ICNF east.
+
+| Period | Source | Targets | Δi | Δj | Median lag |
+|---|---|---|---|---|---|
+| 2004 → Nov 2017 | extract | 2,696 | +0.71 [0.70, 0.73] | +0.49 [0.47, 0.51] | +0.17 h |
+| Mar 2018 → 2019 | extract | 123 | +0.17 [0.09, 0.30] | +0.02 [−0.06, 0.09] | +0.18 h |
+| 2020 → 20 Mar 2023 | LSA SAF, MSG4 and MSG2 | 284 | +0.22 [0.18, 0.30] | +0.01 [−0.02, 0.06] | +0.25 h |
+| 22 Mar → Dec 2023 | LSA SAF, MSG3 | 37 | +0.21 [0.09, 0.34] | +0.04 [−0.10, 0.12] | +0.22 h |
+
+- 2020–2023 minus 2018–2019: Δi +0.05 [−0.08, +0.17], Δj 0.00 [−0.09, +0.09], lag +0.05 h [−0.12, +0.17]. **So the new years sit in the corrected frame and `grid.georef_shift` = 0 is right for them.** No code change.
+- The residual ~0.2 px north–south offset of 6.12 is still there. By year: 2020 +0.10, 2021 +0.12, 2022 +0.33 [0.26, 0.42], 2023 +0.23. The 2022 value is the highest. This does not settle the terrain parallax hypothesis.
+- MSG2 window of January 2022 (13 targets): Δi +0.07, Δj −0.01. No sign of a mislocation, on few fires.
+
+**Viewing angle (new finding).** `PIXEL_VZA` at a fixed pixel, against its 2020–2022 MSG4 median, changes with the hour of the day. Range of the 3-h medians: MSG4 2021–2022 within ±0.7°; MSG3 2023 −2.1 to +1.1°, 2024 −3.2 to +2.4°, 2025 −4.0 to +4.1°; MSG2 January 2022 −5.4 to +6.9°. The lat/lon table does not follow this. A daily swing that grows every year would fit an inclined orbit, but **this cause is not verified.** Consequences:
+- Almost no effect on 2020–2023: only 37 targets are on MSG3, and their offset is normal.
+- **2024–2025, tested 2026-11-13 with the SGIF labels (§8.3):** Δi +0.19, Δj +0.07 (232 targets), no difference from 2020–2023. No new offset despite the larger swing.
+
+### 7.4 What each pipeline step needs
+
+A dry run of the existing functions with patched constants, on the merged table and writing only outside the repository, ran without errors.
+
+| Step | Finding | Change |
+|---|---|---|
+| Cleaning (`clean_data.py`) | Reads only the `.mat`. Merged table: 778,495 rows, identical schema, no overlap in time, no conflicting duplicates. `clean_icnf()` numbers `fire_id` by sort order over the whole table, so new rows are safe only if they all start after 2023-12-30 and old rows are unchanged | Add the merge step. ICNF unchanged until the new file arrives, then read it as a second raw file (7.5) |
+| Exploratory scripts | `eda_figures`, `eda`, `timezone_check`, `plot_largest_fires` and `proximity_analysis` document 2004–2019 results. `water_edge_check.report_detections` concatenates both tables, so it would double-count if `seviri_frp.parquet` became the merged table | Keep `seviri_frp.parquet` as 2004–2019 and write the merged table to a new file |
+| Clustering (`cluster_hotspots.py`) | 3.4 s on the merged table; 31,873 events, 33,655 nuclei. **All event and nucleus ids of 2004–2019 are unchanged** (ids follow time). One event crosses 2020-01-01, so the clustering must run on the merged table, not per source | Read the merged table |
+| `persistent` flag | Recomputing on all years changes the map: 142 cells → 168 (2004–2023) or 157 (2004–2025, 12 of the 35 new ones in Portugal, 20 lost). It would also put future years into a static input (known caveat, `data_pipeline.md` §4.3). Using 2004–2019 keeps exactly the current 142 cells | Freeze on 2004–2019. **Trap:** the 615 new pixels then get NaN from the merge in `main()`, which breaks `det[det["persistent"]]`; they must become False |
+| Sample index (`build_dataset.py`, `tiling_design.py`) | `E.PERIOD` and `SPLIT` are fixed to 2019. **Trap:** if periods ran to 2025, the unlabelled years would look like hard negatives. **Trap:** a year missing from `SPLIT` silently gives a NaN split. **Trap:** a split without periods makes `.loc[list(SPLIT)]` in `build_dataset.main` raise a KeyError | New label period ending at the ICNF end; assert no NaN split; `reindex` instead of `.loc` |
+| Dataset (`dataset.py`) | `checks()` on the dry-run build: 0 count mismatches, 0 targets without a peak, 0 of 3,142 targets with zero weight, 200/200 crops | None |
+| Training (`train.CropSet`) | **Latent crash:** `_random_pt_detection` calls `rng.choice` on the detections on `pt` cells, but periods are selected with `n_det_pt`, which uses the polygon test on lat/lon. The two disagree for 336 of 778,495 detections. 4 hard-negative periods have no detection on a `pt` cell (2021-09-08 06 and 18 UTC, 2022-03-20 18 UTC, 2022-03-21 06 UTC), so `rng.choice` would raise an error if they were drawn. All 4 are in 2020–2023; none in 2004–2019. **With 2020–2023 as training years this crash becomes real** | Required: drop such periods from `neg_periods`. This changes nothing for 2004–2019 |
+| Evaluation (`evaluate_test.py`, `plot_test_examples.py`) | **Trap:** the default `--folder final` would overwrite the results of 6.17. `plot_test_examples.py` has no `--confirm-test` guard, so running it after the relabelling would silently look at the new test years | New output folder; add the guard |
+| Other scripts | With `train` and `val` unchanged (7.5), `baselines`, `evaluate_model`, `peak_ablation`, `plot_predictions`, `cloud_diagnostic`, `water_edge_check` and `time_target_analysis` keep their meaning | Only text and axes in `plot_overview_diagrams` and `plot_presentation_figures` |
+
+**Dry-run regression against the current build:** 568,123 detections identical in all 12 columns; `static.npz` identical; 10,911 fires with identical times, positions, sizes, periods and flags (`seen`, `is_target`, `isolated`), only the split label differs; 11,145 labels identical; all 11,648 periods with identical counts. Extending the data therefore does not change anything for 2004–2019.
+
+### 7.5 Design (revised: ICNF 2024–2025 as test)
+
+**On hold since 2026-11-13:** the split is to be decided after the data integration (§8). The table shows the proposal of 2026-11-02 with the counts of the §8 dry run; the alternative with consecutive years (train 2004–2019, val 2020–2023, test 2024–2025) was also discussed.
+
+**Split.**
+
+| Split | Years | Periods | With target | Hard negatives | Targets | Role |
+|---|---|---|---|---|---|---|
+| `train` | 2004–2014 | 8,000 | 805 | 2,784 | 1,979 | unchanged |
+| `val` | 2015–2016 | 1,462 | 163 | 540 | 403 | unchanged |
+| `train2` | 2017–2019 | 2,190 | 215 | 896 | 439 | former test, now training only |
+| `train3` | 2020–2023 | 2,922 | 213 | 1,058 usable | 321 | new training years |
+| `test` | 2024–2025 | 1,458 | 113 | 508 | 232 | new locked test |
+
+Why:
+- All labelled years up to 2023 can train the final models: 3,142 targets, +32 % on the 2,382 of the current final models.
+- The test covers the two largest years of the new data and comes after all training years.
+- 2017–2019 was used for the test in 6.17 and looked at again in 6.18, so it is no longer an unseen test.
+- Keeping `val` keeps every earlier validation score comparable (6.13–6.15), and the scripts that depend on it valid.
+- Two separate labels (`train2`, `train3`) allow measuring what each block adds.
+
+Costs and risks:
+- **The test is all MSG3, with the largest viewing-angle swing (7.3), and its position is untested.** Models see little of this: 37 MSG3 targets in 2023, and MSG3 in earlier years that the extract does not record.
+- 2024–2025 are unusual years (median FRP 110–115 MW, above all earlier years), so the score may say more about these years than about the method. Report per year. **Compare methods on the same test only; do not compare with 6.17.**
+- Validating on 2015–2016 while training on later years is not chronological. This only affects model selection, not the test.
+- **Keep the fallback open:** once models are scored or trained on 2020–2023, those years can no longer be the test. So E1–E3 (7.7) start only when the new ICNF file is in hand and has passed its checks. The file arrived on 2026-11-13 and passed (§8.2–8.3).
+
+**`persistent` stays frozen on 2004–2019** (the current 142 cells), not 2004–2023 (168 cells). It uses no test year, it keeps `static.npz` identical, and the existing checkpoints see the same input, which the comparison in E4 needs. The cost is that sources that became persistent in 2020–2023 are not flagged.
+
+**New ICNF file: checks before use.** `ignic_ICNF.xlsx` stays unmodified; the new file is a second raw file.
+1. Same columns and units; which dates it covers; final or provisional numbers, since 2025 may still be provisional.
+2. If it also holds older years: compare them with the current file. Any changed row must be understood. Rows up to 2023-12-30 are taken from the current file, so `fire_id` and all earlier results stay the same; the regression below must confirm this.
+3. Repeat the audit of 7.2: time zone (DST test), coordinates, burned area, completeness per month. `LABEL_PERIOD` ends where the file is complete, not automatically on 2025-12-30.
+4. **Position test, rule fixed now:** repeat 7.3 for 2024 and 2025, also by 3-h block of the day. If a median differs from 2020–2023 by more than 0.25 px on either axis (half of the 2017 shift) with an interval that excludes 0, stop and investigate before scoring anything. Data only, no model.
+
+Done 2026-11-13 (§8.2–8.3). All four checks passed. The rule fired once for one 3-h block; the investigation showed that comparing a single block with the all-hours median was the wrong reference (§8.3).
+
+**Files.** New merged table `data/processed/seviri_frp_2004_2025.parquet`. `seviri_frp.parquet` stays 2004–2019. `seviri_frp_events`, `seviri_events`, `seviri_nuclei` and `data/processed/model/` hold the extended data and overwrite the current files, as earlier rebuilds did. The old build stays in git at commit `5a0f39d`.
+
+**Expected totals after the rebuild without the new ICNF file (stage A; superseded by the totals with ICNF 2024–2025 in §8.6):** 12,371 fires ≥ 10 ha, 3,142 targets (820 isolated), 12,629 labels (9,487 ignore), 14,570 periods (last 2023-12-29 18 UTC), `detections.parquet` about 8.4 MB. The dry run labelled 2020–2023 as `test`; only that label changes. MTG FCI data (LSA-509) is not part of this work: it has another grid and only starts in 2025.
+
+### 7.6 Implementation plan
+
+**Stage A: connect the data (can start now).** Steps 0–9. No model is trained or scored on 2020–2025 in this stage.
+
+0. **Row-level overlap check (needs the LSA SAF login).** Re-download 2019-07-20 to 22 and compare time, lat, lon, FRP and confidence row by row with the old extract. Any mismatch stops the work until it is understood. The default `--merge` range starts in 2020, so these days do not enter the merged table.
+1. **`src/clean_data.py`:** keep `clean_seviri()`. Add `merge_seviri()`, which reads `seviri_frp_2020_2025.parquet`, asserts equal dtypes, no overlap in time and no conflicting duplicates, sorts by time, lat, lon and writes the merged table (778,495 rows).
+2. **`src/tiling_design.py`:** new `SPLIT` (7.5), `LABEL_PERIOD = ("2004-01-20", "2023-12-30")`, `PERSISTENT_END = "2020-01-01"`. `load()` and `periods()` use the merged table and `LABEL_PERIOD`. `E.PERIOD` stays for the exploratory scripts and the clustering diagnostics, so the numbers of 3.1–3.2 stay comparable.
+3. **`src/cluster_hotspots.py`:** `load()` reads the merged table. `pixel_stats` uses rows before `PERSISTENT_END`. New pixels get `persistent = False`, with a bool dtype.
+4. **`src/build_dataset.py`:** `fires()` and `periods()` use `LABEL_PERIOD`. Assert that no fire or period has a NaN split. The split summary tolerates an empty `test`. `build_info.json` also records the label period, the persistent cut-off and the input file.
+5. **`src/train.py`:** remove periods without a detection on a `pt` cell from `neg_periods` in `CropSet` (required, 7.4). The test-split guard stays.
+6. **`src/check_new_years.py` (new):** the checks of 7.2–7.3 and the regression against the build of commit `5a0f39d`, output `outputs/new_years_check.txt`. Data only, no model and no baseline score on `test`.
+7. **`src/evaluate_test.py`:** evaluate several checkpoint folders in one run, `--split` for a non-test block (`train3`, for E1), new output folder (never `outputs/final/`), AP per year and per satellite period, period-level bootstrap interval for AP differences. **`src/plot_test_examples.py`:** add `--confirm-test` and an output folder.
+8. **Text and figures:** docstrings that name the old split (`train.py`, `baselines.py`, `evaluate_test.py`, `plot_test_examples.py`, `grid.py`, `tiling_design.py`, `build_dataset.py`); labels in `plot_overview_diagrams.py`; x-axis of `plot_presentation_figures.georef_offset_by_year`.
+9. **Rebuild** in the order of `data_pipeline.md` §11 and check the acceptance table below.
+
+**Stage B: when the new ICNF file arrives.** Replaced by §8.6 (2026-11-13): the file is a full SGIF export for 2001–2025, not only 2024–2025, and the checks of 7.5 passed.
+
+10. ~~Run the checks of 7.5 on the new file, including the position test.~~ Done (§8.2–8.3).
+11. ~~`clean_icnf()` adds the rows after 2023-12-30 from the new file.~~ See §8.6, step B1: all rows from 2001 on come from SGIF, and the rebuild keeps every `fire_id` up to 2023.
+
+**Stage C: experiments.**
+
+12. Experiments of 7.7, then update this section, `data_pipeline.md` (make §13 the current state) and `model_review.md`.
+
+Acceptance of stage A, before any training:
+
+| Check | Expected |
+|---|---|
+| Merged table | 778,495 rows, 0 duplicates on (time, lat, lon) |
+| Clustering | 31,873 events, 33,655 nuclei; ids of 2004–2019 unchanged |
+| Rows and labels of 2004–2019 | identical to commit `5a0f39d`, except the split label `test` → `train2` |
+| `static.npz` | identical (142 persistent cells) |
+| Totals | 12,371 fires, 3,142 targets, 12,629 labels, 14,570 periods, no NaN split |
+| `dataset.py` checks | 0 mismatches, 0 targets without a peak, 0 with zero weight, 200/200 crops |
+| Baseline on validation | AP 0.448 @ 5 km, 0.577 @ 10 km, as in 6.12 |
+| `ablations_georef/cnn3d_final_s0-2` on validation, no training | same AP as stored in their checkpoints, within rounding |
+
+### 7.7 Experiments
+
+Configurations stay fixed (`cnn3d_final`, `conv_final`, 3 seeds); no new search. Times are scaled from 6.15 and 6.17 by the number of crops.
+
+| # | Question | Training | Scored on | Cost |
+|---|---|---|---|---|
+| E1 | Do the existing models work on the new source? | none | `train3` 2020–2023: baseline and `final/` (trained ≤ 2016), per year and satellite period. Not a test, because these years then go into training | minutes |
+| E2 | Do the extra years help? | `cnn3d_final` with `--train-splits train,train2` (2,418 targets, +22 %); `cnn3d_final` and `conv_final` with `train,train2,train3` (2,739 targets, +38 %); `--folder ablations_2023` | validation 2015–2016, against `ablations_georef` (0.635 / 0.704 and 0.613 / 0.696) | about 6–7 h |
+| E3 | Final models | `--train-splits train,val,train2,train3 --no-val` (3,142 targets, +32 %; `--folder final_2023`) | not scored yet | about 5 h |
+| E4 | **Single test** | none | 2024–2025, one run: baseline, `final/` (trained ≤ 2016), `final_2023/` (trained ≤ 2023). Main comparison: `final_2023/cnn3d_final` − `final/cnn3d_final`, AP @ 5 and 10 km with a bootstrap interval; also per year | minutes |
+| E5 | Optional, after E4 | all labelled years, which needs an explicit override of the test guard; or leave-block-out cross-validation for a robust estimate | – | later |
+
+What to expect: the corrected-data ablations moved AP by about ±0.01–0.02, and 6.17 suggests the models are close to what the labels allow. So +32 % more targets will probably give a modest gain at best. E4 is still valuable because it is an unseen test on the two largest recent years. Other gains already measured on validation, such as the seed ensemble and the log-parabola decoder (`model_review.md` §3.1), are separate from this work.
+
+### 7.8 Open questions
+
+1. ~~New ICNF file: when does it arrive, is it a full release or only 2024–2025, up to which date, and are the 2025 numbers final?~~ Arrived 2026-11-13: full SGIF export 2001-01-05 → 2025-12-31 (§8). Whether the 2025 numbers are final is not stated in the files.
+2. The PUM of the MSG product (LSA-502) is still missing; `docs/lsasaf/` covers the MTG product only. It, or the LSA SAF helpdesk, could say when version 2.4.0 started. This does not block the work, because the data show no step at the join.
+3. Step 0 needs the LSA SAF login: run by the user, or by setting `LSASAF_USER` and `LSASAF_PASSWORD`.
+
+## 8. ICNF SGIF export 2001–2025 (2026-11-13)
+
+Status: audit and plan of 2026-11-13 (8.1–8.7); **implemented the same day (8.8).** The audit numbers were first computed with scratch scripts; `src/check_new_years.py` now reproduces the checks (`outputs/new_years_check.txt`). On 2020–2025 only ICNF and SEVIRI are used. The model-level checks in 8.4 use validation 2015–2016 only, with the saved predictions of 6.20 (`outputs/cloud/val_preds_s0-2.parquet`, `ablations_georef/cnn3d_final_s0-2`). They reproduce the validation AP of 6.15 (0.635 / 0.704).
+
+### 8.1 The files
+
+- `data/raw/icnf/Registos_Incendios_SGIF_2001_2010.xlsx`, `…_2011_2020.xlsx`, `…_2021_2025.xlsx` (157 MB). Each has one data sheet (`SGIF_<years>`), a field legend (`Legenda`) and the export query (`SQL`); the 2021–2025 file also lists the cause codes (`TipoCausa`).
+- 497,478 rows with the same 41 columns in all three files, alert times 2001-01-05 02:00 → 2025-12-31 18:10. `Codigo_SGIF` is unique on every row. Every row has coordinates.
+- The query reads `SGIF.dbo.Stat_MasterT_Export` with `DHInicio as DataHoraAlerta`. The `SQL` sheet of the 2021–2025 file says `WHERE ano between 2024 and 2024`, but the file holds 2021–2025 (8,186 / 10,390 / 7,523 / 6,255 / 8,252 rows), so the sheet is left over from one query and does not describe the file.
+- Column types differ between the files: end time stored as text in 2001–2010 (ISO format, all values parse); ANEPC code, parish code and the military coordinates are float in some files and integer in others. They must be cast explicitly.
+
+| Current `icnf_fires.parquet` | Old xlsx | SGIF | Check |
+|---|---|---|---|
+| `start_local` | `Data` | `DataHoraAlerta` | identical on every matched row (8.2), so still the alert time in local time |
+| `end_local` | `DataFim` | `DataHora_Extincao` | some 2008 values carry seconds; floored to the minute they equal the old values |
+| `municipality_code` | `Dicofre` | `DTCCFR // 100` | `DTCCFR` is the INE parish code |
+| `district`, `municipality` | `Distrito`, `Concelho` | `Distrito`, `Concelho` | identical after `normalise_text` |
+| `burned_area_ha` | `AA` | `AreaTotal_ha` | equals `AreaPov_ha + AreaMato_ha + AreaAgric_ha` on every row |
+| `lat`, `lon` | `lat`, `lon` | `Latitude`, `Longitude` | identical |
+| – | – | `Ano`, `Mes`, `Dia`, `Hora` | `Hora` differs from the hour of `DataHoraAlerta` on 843 rows (2008–2018, mostly ±1 h). Do not use it |
+
+### 8.2 Comparison with the current table, 2001–2023
+
+Rows were matched one to one on alert time, coordinates (5 decimals) and area (4 decimals), then on alert time and municipality.
+
+| Result | Rows |
+|---|---|
+| Old rows with an exact SGIF counterpart | 477,674 |
+| Old rows whose coordinates the old cleaning set to NaN (outside the box); SGIF has the same raw values | 32 |
+| Old rows without a counterpart | 0 |
+| SGIF rows without a counterpart | 5,265 |
+
+- **The 5,265 extra SGIF rows are double entries.** Each one shares alert time, position and area with a matched row, and 5,236 of the 5,262 groups also share the ANEPC occurrence code. They differ only in parish (1,750 groups), alert source (814), place name (243), cause (11) or the land-cover split of the area (≤ 10). By year: 5,089 in 2003, 63 in 2004, 64 in 2005, 32 in 2002, and a few in other years. The old cleaning removed them as exact duplicates (1.3). 35 of them are ≥ 10 ha (5 ≥ 50 ha), so they must be removed again or they would duplicate labels.
+- Matched rows agree in area, coordinates (largest difference 9 × 10⁻¹⁶ degrees), municipality and district.
+- End times: after flooring to the minute, one difference remains. Fire 806684 (2023-10-11, 1.2 ha) has an end time in SGIF and none in the old file.
+- **Rebuild test.** The old rows of 1980–2000 (the SGIF export starts in 2001) plus the SGIF rows, cleaned with the rules of `clean_data.clean_icnf`, give 821,433 rows: the 806,926 old rows plus 14,507 rows of 2024–2025. **Every `fire_id` from 0 to 806,925 has the same content in all 13 columns**, except the end time of fire 806684 (and its `end_invalid`, `duration_h`, `end_utc`). Two rules matter for this:
+  - The duplicate rule must be the old one, i.e. all old columns with the end time floored to the minute. Using only alert time, position and area would also drop 40 rows that differ in end time or municipality (32 below 1 ha, 7 of 1–10 ha, 1 of 10–50 ha) and would shift `fire_id`.
+  - The 6 rows that tie on (alert time, municipality, area) are below 10 ha and never reach the labels.
+- **Conclusion: for 2001–2023 the SGIF export holds the same information as the current table, and it extends it to 2025 and with more fields.** The pipeline can move to it.
+
+### 8.3 2024–2025
+
+| Year | Rows | ≥ 10 ha | ≥ 50 ha | ≥ 100 ha | ≥ 500 ha | ≥ 1,000 ha | Burned area | Targets (isolated) | Seen share 50–100 / 100–500 / ≥ 500 ha |
+|---|---|---|---|---|---|---|---|---|---|
+| 2024 | 6,255 | 324 | 128 | 82 | 35 | 25 | 137,700 ha | 111 (31) | 0.87 / 0.83 / 0.91 |
+| 2025 | 8,252 | 352 | 152 | 101 | 44 | 32 | 270,700 ha | 121 (59) | 0.73 / 0.79 / 0.89 |
+
+- Burned areas agree with the national reports (7.1). No duplicates in 2024–2025, all coordinates inside the box, no alert time in a DST switch hour.
+- Largest fires: Arganil 2025-08-13 (65,478 ha, cause natural), Trancoso 2025-08-09 (46,917 ha), Vila Nova de Paiva 2024-09-16 (19,996 ha). 159 of the 324 fires ≥ 10 ha of 2024 started in September.
+- **Trap:** one 2024 row (2024-09-21, 0.0001 ha) has no district, municipality or parish. The `int16` cast of `municipality_code` in `clean_icnf` fails on it.
+- **Time zone:** winter − summer median lag +0.61 h [0.03, 1.03] (273 summer, 20 winter fires ≥ 10 ha); after the conversion the median lag is +0.23 h. Still Europe/Lisbon local time.
+- **Position (rule of 7.5):** 2024 Δi +0.21 [0.16, 0.32], Δj +0.03 [−0.01, 0.11] (111 targets); 2025 Δi +0.13 [0.08, 0.24], Δj +0.08 [−0.01, 0.15] (121); together Δi +0.19, Δj +0.07. Difference from 2020–2023: Δi −0.03 [−0.11, +0.03], Δj +0.05 [−0.03, +0.11]. **No new offset.**
+- **The rule fired once, and the reference was wrong.** By 3-h block of the first detection, 03–06 UTC gave Δi +0.49 (9 targets), +0.27 px [0.04, 0.61] above the all-hours median of 2020–2023. But the same block was already high in 2018–2023 (+0.36, 12 targets); the difference from that block is +0.14 [−0.05, +0.67]. Night detections sit further south in both periods: 18–06 UTC Δi +0.32 [0.15, 0.37] in 2018–2023 and +0.39 [0.21, 0.47] in 2024–2025, against +0.21 and +0.15 by day. With 16 block × axis tests, one exceedance is also expected by chance. **Corrected rule:** compare each block with the same block of the reference years. Under that rule nothing exceeds 0.25 px with an interval excluding 0.
+- The night–day difference of about 0.1 px north–south is a new observation about the residual offset of 6.12. A view-angle effect is too small to explain it (about 0.04 px for 1 km of terrain at the observed swing of ±4°).
+- First-detection lag: +0.12 h in 2024–2025 against +0.23 h in 2020–2023 (−0.12 h [−0.25, −0.01]). Less than one slot; no action.
+
+### 8.4 The new fields: what is useful?
+
+Coverage by year (all fire sizes):
+- cause: 8–13 % in 2001–2006, 38 % in 2007, 49–64 % in 2008–2010, 70–92 % in 2011–2020, 97–100 % in 2021–2025. For fires ≥ 50 ha: 50–76 % in 2001–2006, 85 % in 2007, at least 95 % from 2008.
+- first intervention: none before 2008, 85–91 % in 2008–2010, 98–100 % from 2011.
+- fire-weather indices: 98–100 % in every year; −80 marks a missing value (36 rows), plus 600 NaN.
+- alert source: at least 99.8 % until 2023, 81 % in 2024, 78 % in 2025.
+
+| Field | Finding | Use |
+|---|---|---|
+| **Rekindle** (`TipoCausa` = `Reacendimento`, code 711) | 218 of the 3,018 targets with known cause (7.2 %; 6.3–8.0 % per block of years). Rekindle targets are rarely isolated (7.8 % vs 30.5 %), and 69 % have an earlier ICNF fire ≥ 1 ha within 5 km and 72 h (32 % for the others). So the flag agrees with the records. Validation (47 rekindle targets of 403): recall 0.74 @ 5 km and 0.82 @ 10 km, against 0.85 and 0.91 for the other targets with known cause. At the best-F1 point, 24 % of the false alarms lie within 10 km of a rekindle record of the same period, of any size; with the records moved ±7 days it is 5–10 % (at 5 km: 15 % vs 1.5–2.6 %). If those false alarms counted as neutral, AP would rise from 0.704 to 0.737 @ 10 km and from 0.635 to 0.650 @ 5 km (upper bound). Making the 47 rekindle targets ignore regions changes AP little (0.700 / 0.633) | **Yes.** This is the rekindle flag asked for in 6.20 and `model_review.md` §6.4: (a) recall by rekindle in every evaluation; (b) a second evaluation protocol where rekindle records of any size are neutral; (c) a training ablation with rekindle records as ignore regions. Caveat: before 2008 most small fires have no cause, so "unknown" must not be read as "not a rekindle" |
+| Cause type | Natural (lightning) fires ≥ 50 ha are seen only 33 % of the time (42 fires, median 234 ha), against 71–78 % for intentional, negligent and unknown causes; rekindles 66 % | Reporting; a further explanation of unseen fires (6.20) |
+| Fire weather at the ignition point (`FWI`, `ISI`, `FFMC`, `DMC`, `DC`, `BUI`, `DSR`) | Seen share of fires ≥ 50 ha by FWI quartile: 0.57, 0.75, 0.79, 0.81 (FWI 0–24, 24–33, 33–41, 41–94). Partly a size effect: median size 89 → 196 ha | Stratified evaluation only. **Not a model input:** it exists only where ICNF recorded a fire, and ICNF never enters the input (`data_pipeline.md` §0). As an input it would need a gridded FWI product (objective iv) |
+| Land cover of the burned area (forest, shrub, agricultural ha) | Fires ≥ 50 ha with ≥ 50 % agricultural area are seen 60 % of the time (149 fires), forest 76 %, shrub 71 %, mixed 87 % | Stratified evaluation |
+| First intervention time | Alert → first intervention: median 11 min, p90 24 min; the same for rekindles | None; the label time stays the alert |
+| Alert source | Median lag first detection − alert (targets 2011–2023): citizens +0.08 h, lookout posts +0.15 h, 117 +0.20 h, 112 +0.28 h, CCO 0.00 h | None; differences are below one slot |
+| `Codigo_SGIF` | Unique and stable | Keep as `sgif_code` for traceability; `fire_id` stays the pipeline key |
+| Projected coordinates (EPSG:3763, EPSG:20790) | Agree with lat/lon to a median of 15 m (p99 216 m). 18 fires ≥ 10 ha differ by more than 1 km (2 targets, 6 of them by more than 5 km) | Quality flag (`coord_check_km`) |
+| Parish, place name, protected areas | Finer place names; protected-area names come in several spellings | None now |
+| `Duracao_Horas`, `IncSup24horas` | Equal to end − alert on every row | None |
+
+Positions become less generic over time. Share of fires ≥ 10 ha at a coordinate shared with another fire: 39.5 % (2004–2010), 28 % (2011–2016), 7.6 % (2017–2019), 2.5 % (2020–2023), 2.2 % (2024–2025).
+
+### 8.5 Proposed decisions
+
+- **ICNF source:** the SGIF export for 2001–2025. `ignic_ICNF.xlsx` is kept only for 1980–2000, because the SGIF export starts in 2001 and fig. 01 shows 1980–2023. Both raw files stay unmodified.
+- **Cleaning rules:** unchanged, including the duplicate rule (8.2), so all rows and `fire_id`s up to 2023 stay as they are. In a duplicate group the first row in file order is kept, as before; its new fields are kept with it (the cause differs inside 11 groups).
+- **New columns** in `icnf_fires.parquet`, NaN before 2001: `sgif_code`, `anepc_code`, `parish_code`, `area_forest_ha`, `area_shrub_ha`, `area_agric_ha`, `first_intervention_local`/`_utc`, `cause_code`, `cause_type`, `cause_group`, `rekindle` (nullable: NA where the cause is unknown), `alert_source`, `fwi`, `isi`, `ffmc`, `dmc`, `dc`, `bui`, `dsr` (−80 → NaN), `coord_check_km`.
+- **Label period:** to 2025-12-30, the same pattern as before. ICNF runs to 2025-12-31 18:10; SEVIRI files exist to 2025-12-31.
+- **Split:** on hold (7.5). `SPLIT` must still assign every year 2004–2025, otherwise the build fails on NaN splits.
+- **`persistent`:** stays frozen on 2004–2019 (7.5).
+- **Rekindles:** used for reporting, a second protocol and an ablation (8.4). The primary labels and the primary protocol do not change, so all earlier scores stay comparable.
+
+### 8.6 Implementation plan
+
+Stage A of 7.6 (steps 0–9) is unchanged, except that the label period now runs to 2025. Stage B is replaced by:
+
+B1. **`src/clean_data.py`, `clean_icnf()`:**
+- Read the three SGIF workbooks, sheet named after the file, about 75 s.
+- Cast types and map the columns as in 8.1. Take the rows before 2001 from `ignic_ICNF.xlsx` with the existing steps.
+- Then the existing steps in the same order: text normalisation, missing start, duplicates over the old columns (end floored to the minute), end validity, box, UTC, sort, `fire_id`.
+- Allow the one missing municipality (8.3).
+- Add the new columns of 8.5.
+
+B2. **`src/tiling_design.py`:** `LABEL_PERIOD = ("2004-01-20", "2025-12-30")`. `SPLIT` covers 2004–2025 once the split is decided.
+
+B3. **`src/build_dataset.py`:**
+- Carry `sgif_code`, `rekindle`, `cause_type`, `fwi` and the land-cover areas into `fires.parquet`, for reporting only; the sample builder does not read them.
+- New `rekindles.parquet`: all rekindle records with valid coordinates, of any size, with their period and sensor-frame position. The second protocol and the ablation need it, because `fires.parquet` only holds fires ≥ 10 ha.
+
+B4. **`src/evaluate.py`:**
+- Subgroups `rekindle`, `cause_type`, FWI quartile and dominant land cover.
+- Option `neutral_rekindles=True`: a prediction within k km of a rekindle record of its period counts as ignored. This is the second protocol; the first stays the default.
+
+B5. **`src/dataset.py`, `src/train.py`:** `--rekindle-ignore`, which adds ignore discs at the rekindle records of the period. Run it as a validation ablation like 6.13.
+
+B6. **`src/check_new_years.py`:**
+- Also runs 8.2–8.4: matching, duplicates, coverage, time zone, and the position test by year and by 3-h block against the same block of 2018–2023.
+- Output `outputs/new_years_check.txt`.
+
+B7. **Docs:** `data_pipeline.md` §1–2 (source, columns), §6 (fires columns), §10 (subgroups, second protocol), §12 (rekindle flag now exists).
+
+Acceptance (from the dry run, labels to 2025-12-30):
+
+| Check | Expected |
+|---|---|
+| `icnf_fires.parquet` | 821,433 rows; 5,265 SGIF duplicates dropped; `fire_id` 0–806,925 identical in all columns except fire 806684 (end time) |
+| Fires and targets | 13,047 fires ≥ 10 ha; 3,374 targets (910 isolated); 0 target labels outside the loss mask |
+| Labels | 13,322 (3,374 target, 9,948 ignore) |
+| Periods | 16,032, last 2025-12-29 18 UTC |
+| By block (periods / with target / hard negatives / targets) | 2004–2014: 8,000 / 805 / 2,784 / 1,979. 2015–2016: 1,462 / 163 / 540 / 403. 2017–2019: 2,190 / 215 / 896 / 439. 2020–2023: 2,922 / 213 / 1,062 / 321. 2024–2025: 1,458 / 113 / 508 / 232 |
+| 2004–2019 regression | detections, `static.npz`, fires, labels and period counts identical to commit `5a0f39d` (one coordinate within 10⁻¹⁵) |
+| `dataset.py` checks | 0 mismatches, 0 targets without a peak, 0 of 3,374 with zero weight, 200/200 crops |
+| Hard negatives without a detection on a `pt` cell | the same 4 periods of 2021–2022, so step 5 of 7.6 is still required |
+
+The 2020–2023 block has 2,922 periods instead of the 2,918 of 7.5, because 30–31 December 2023 now fall inside the label period.
+
+### 8.7 Open questions
+
+1. The split (7.5), on hold.
+2. Rekindle policy: is the plan (reporting, second protocol, ablation; primary labels unchanged) the right scope, or should rekindles change the primary labels?
+3. Rows before 2001: keep `ignic_ICNF.xlsx` for 1980–2000 (proposed), or drop those years. Dropping them would renumber every `fire_id`.
+
+### 8.8 Implementation (2026-11-13)
+
+Stages A and B of 7.6 / 8.6 are implemented, except step 0 (row-level overlap check, needs the LSA SAF login). Raw ICNF files `data/raw/icnf/` are git-ignored.
+
+**Decisions taken with the user (2026-11-13):**
+- The split is deferred. As a default, the layout of 7.5 is used: `train` 2004–2014, `val` 2015–2016 (both unchanged), `train2` 2017–2019 (the test of 6.17), `train3` 2020–2023, `test` 2024–2025. Why this default: it changes the fewest things. Every earlier validation score stays comparable, `train.py` defaults and all scripts that use `val` keep their meaning, and changing it later means editing `tiling_design.SPLIT` and rebuilding. The consecutive alternative (train 2004–2019, val 2020–2023, test 2024–2025) is still open.
+- Rekindles: reporting, second protocol and ablation; primary labels unchanged.
+- `ignic_ICNF.xlsx` is kept for 1980–2000.
+
+**Code:**
+- `src/clean_data.py`: `clean_icnf()` reads the three SGIF workbooks (2001–2025) and the old file for earlier rows. The cleaning rules are unchanged, the new columns are those of 8.5, and `municipality_code` is nullable. New `merge_seviri()` writes `seviri_frp_2004_2025.parquet`; `seviri_frp.parquet` stays 2004–2019. Two parsing details: end times in the 2001–2010 workbook are text, some with milliseconds (`format="ISO8601"`); cause codes reach 61,200 (`Int32`).
+- `src/tiling_design.py`: `SPLIT`, `LABEL_PERIOD` (2004-01-20 → 2025-12-30), `PERSISTENT_END` (2020-01-01), `SEVIRI_FILE`.
+- `src/cluster_hotspots.py`: reads the merged table; `persistent` from detections before 2020, later pixels False. The diagnostics keep the fires of 2004–2019.
+- `src/build_dataset.py`: label period; `split_of()` fails on a year without a split; report columns in `fires.parquet`; new `rekindles.parquet`; more fields in `build_info.json`.
+- `src/dataset.py`: `FireData.rekindles`; `sample(..., rekindle_ignore=True)`.
+- `src/train.py`: hard-negative periods need a detection on a `pt` cell (7.4); `--rekindle-ignore` (config key `rekindle_ignore`, default False, so old checkpoints load unchanged).
+- `src/run_ablations.py`: experiment `cnn3d_final_rk`.
+- `src/evaluate.py`: `report_attrs()` (rekindle, cause type, FWI quartile with fixed bins, land cover); `neutral_rekindles=True` for the second protocol.
+- `src/evaluate_test.py`: `--folders`, `--out` (never `final`), subgroups and AP with rekindles neutral.
+- `src/plot_test_examples.py`: `--split` (default `train2`, i.e. the years of 6.18), `--out`, `--confirm-test` for the test split.
+- `src/check_new_years.py`: the checks of 7.2–7.3 and 8.2–8.3 and the regression against commit `5a0f39d`.
+- Docstrings: `grid.py`, `baselines.py`.
+
+**Rebuild and acceptance.** Logs: `outputs/clean_data_log.txt`, `cluster_hotspots_log.txt`, `build_dataset_log.txt`, `tiling_design_log.txt`, `dataset_check_log.txt`, `baselines_log.txt`, `new_years_check.txt`.
+
+| Check | Expected (8.6) | Result |
+|---|---|---|
+| `icnf_fires.parquet` | 821,433 rows; 5,265 SGIF duplicates; `fire_id` 0–806,925 unchanged except fire 806684 | as expected (6,452 duplicates in total, as in 1.3) |
+| Merged SEVIRI | 778,495 rows | 778,495 |
+| Clustering | 31,873 events, 33,655 nuclei, ids of 2004–2019 unchanged | as expected; ICNF diagnostics and figures of 3.1–3.2 unchanged |
+| Sample index | 13,047 fires, 3,374 targets (910 isolated), 13,322 labels, 16,032 periods, block counts of 8.6 | as expected |
+| Regression 2004–2019 | detections, static, fires, labels, periods identical | identical; positions within 3 × 10⁻¹⁴ px |
+| `dataset.py` checks | 0 / 0 / 0 of 3,374 / 200 of 200 | as expected |
+| Baselines | train and validation as before | identical; only the total number of nucleus predictions changed (25,949 → 33,655) |
+| `ablations_georef/cnn3d_final_s0-2` on validation, no training | AP as stored, 0.635 / 0.704 | 0.635 ± 0.008 / 0.704 ± 0.001; second protocol 0.650 / 0.737 |
+| Position rule (by 3-h block vs. the same block of 2018–2023) | not exceeded | not exceeded |
+| Smoke test `train.py --train-splits train,train2,train3 --arch cnn3d --neg-ratio 2 --rekindle-ignore` | runs | 2,739 positive crops; 4,738 of 4,742 hard-negative periods usable; `train` alone still 2,784 |
+
+What is not done:
+- Step 0 of 7.6 (LSA SAF login).
+- No model has been trained or scored on 2020–2025. The experiments of 7.7 (adapted to the final split) and the rekindle ablation `cnn3d_final_rk` are open.
+- The period-level bootstrap and the AP per satellite period planned for `evaluate_test.py` are not implemented yet.
+- The tiling-design numbers (`outputs/tiling_design_log.txt`) now cover 2004–2025; they compare ICNF and SEVIRI without the geo-referencing correction, as before (6.12).
+

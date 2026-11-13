@@ -1,4 +1,4 @@
-Predictions per variant (all periods): birth: 25,949, birth, no reappeared: 19,044, birth, no reappeared/persist.: 17,692, first-hour centroid: 17,692
+Predictions per variant (all periods): birth: 33,655, birth, no reappeared: 24,207, birth, no reappeared/persist.: 22,612, first-hour centroid: 22,612
 
 Baselines (test split locked):
                      baseline split  k [km]  targets    AP  recall (all preds)  precision (all preds)  best F1  P @ best F1  R @ best F1  false alarms / day @ best F1  median error TP [km]  nearest pred ≤ 5 km  nearest pred median [km]

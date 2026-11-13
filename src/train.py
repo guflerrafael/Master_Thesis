@@ -15,7 +15,9 @@ Time resolution: --step-agg sets how many 15-min slots form one model step
 its slots. 15-min steps make training ~4x slower and use ~4x more activation memory.
 
 Final models (notes.md 6.16): --train-splits train,val --no-val trains on 2004-2016 without
-validation and saves the last epoch; the test split can never be used for training.
+validation and saves the last epoch; the test split can never be used for training. The splits are
+defined in tiling_design.SPLIT (train 2004-2014, val 2015-2016, train2 2017-2019, train3 2020-2023,
+test 2024-2025; notes.md 8.8).
 
 Run from the repository root:
   .venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt
@@ -46,7 +48,8 @@ ALL_CHANNELS = ("frp", "confidence", "detected", "births", "period", "time", "pt
 DEFAULT_CHANNELS = ("frp", "confidence", "detected", "period", "time", "pt", "persistent")
 DEFAULTS = dict(step_agg=4, channels=list(DEFAULT_CHANNELS), history_h=HISTORY_H, tail_h=TAIL_H,
                 arch="convlstm", layers=2, hidden=32, kernel=3, readout="last",
-                crop=32, sigma=1.0, ignore_r=2.0, min_target_ha=None, loss="focal", neg_ratio=1.0, flip=True)
+                crop=32, sigma=1.0, ignore_r=2.0, min_target_ha=None, loss="focal", neg_ratio=1.0, flip=True,
+                rekindle_ignore=False)
 
 
 def get_device():
@@ -101,7 +104,7 @@ def features(x, static, cfg):
 
 def sample_kwargs(cfg):
     return dict(sigma=cfg["sigma"], ignore_r=cfg["ignore_r"], min_target_ha=cfg["min_target_ha"],
-                births="births" in cfg["channels"])
+                births="births" in cfg["channels"], rekindle_ignore=cfg["rekindle_ignore"])
 
 
 def static_crop(data, crop=None):
@@ -120,9 +123,12 @@ class CropSet(torch.utils.data.Dataset):
         if cfg["min_target_ha"]:
             pos = pos[pos["fire_id"].map(data._area) >= cfg["min_target_ha"]]
         self.pos = pos.reset_index(drop=True)
-        self.neg_periods = per.loc[(per["n_targets"] == 0) & (per["n_det_pt"] > 0), "period"].reset_index(drop=True)
-        self.n_neg = int(round(cfg["neg_ratio"] * len(self.pos)))
         self._pt_idx = {}
+        # n_det_pt uses the polygon test on each detection's lat/lon, the crop centre needs a detection on a
+        # 'pt' cell; 4 periods of 2021-2022 have the first but not the second (notes.md 7.4)
+        cand = per.loc[(per["n_targets"] == 0) & (per["n_det_pt"] > 0), "period"]
+        self.neg_periods = cand[[len(self._pt_detections(p)) > 0 for p in cand]].reset_index(drop=True)
+        self.n_neg = int(round(cfg["neg_ratio"] * len(self.pos)))
         self.resample()
 
     def resample(self):
@@ -133,14 +139,18 @@ class CropSet(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.pos) + len(self.neg)
 
-    def _random_pt_detection(self, period):
+    def _pt_detections(self, period):
+        """Indices of the window's detections on a mainland ('pt') cell."""
         if period not in self._pt_idx:
             d = self.data
             s0 = d.first_slot(period)
             a, b = np.searchsorted(d._slot, [s0, s0 + 96])
             idx = np.arange(a, b)
             self._pt_idx[period] = idx[d.static["pt"][d._i[idx], d._j[idx]]]
-        k = self.rng.choice(self._pt_idx[period])
+        return self._pt_idx[period]
+
+    def _random_pt_detection(self, period):
+        k = self.rng.choice(self._pt_detections(period))
         return self.data._i[k], self.data._j[k]
 
     def __getitem__(self, k):
@@ -274,6 +284,7 @@ def parse_args(argv=None):
     ap.add_argument("--loss", default=DEFAULTS["loss"], choices=sorted(LOSSES))
     ap.add_argument("--neg-ratio", type=float, default=DEFAULTS["neg_ratio"], help="hard negatives per positive")
     ap.add_argument("--no-flip", action="store_true")
+    ap.add_argument("--rekindle-ignore", action="store_true", help="ignore regions at all ICNF rekindle records (ablation)")
     args = ap.parse_args(argv)
     chans = [c.strip() for c in args.channels.split(",") if c.strip()]
     unknown = set(chans) - set(ALL_CHANNELS)

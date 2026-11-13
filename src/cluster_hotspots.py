@@ -15,6 +15,11 @@ ICNF is used only in the diagnostics (how many large fires end up in a shared ev
 nucleus), never to form events or nuclei, so they can later define the model input without
 label leakage.
 
+Input: SEVIRI 2004-2025 (tiling_design.SEVIRI_FILE). The diagnostics and the case study keep the
+ICNF fires of eda_figures.PERIOD (2004-2019), so their numbers stay those of notes.md 3.1-3.2.
+The persistent off-season flag uses detections before tiling_design.PERSISTENT_END only
+(2004-2019, notes.md 7.4); pixels first active later are not persistent.
+
 Outputs:
   data/processed/seviri_frp_events.parquet   detections + event_id + nucleus_id + flags
   data/processed/seviri_events.parquet       one row per event
@@ -38,6 +43,7 @@ from scipy.spatial import QhullError
 
 import eda_figures as E   # shared helpers and palette
 from proximity_analysis import count_neighbours
+from tiling_design import PERSISTENT_END, SEVIRI_FILE
 
 PROC = E.PROC
 FIG = E.ROOT / "figures" / "clustering"
@@ -202,7 +208,7 @@ def build_nuclei(sev, d_km=D_KM, gap_h=GAP_H, look_back_h=48):
 
 
 def load():
-    sev = pd.read_parquet(PROC / "seviri_frp.parquet").sort_values(["time_utc", "lat", "lon"]).reset_index(drop=True)
+    sev = pd.read_parquet(PROC / SEVIRI_FILE).sort_values(["time_utc", "lat", "lon"]).reset_index(drop=True)
     icnf = pd.read_parquet(PROC / "icnf_fires.parquet")
     pool = icnf[icnf["lat"].notna() & icnf["start_utc"].notna()
                 & icnf["start_utc"].between(pd.Timestamp(E.PERIOD[0], tz="UTC"), pd.Timestamp(E.PERIOD[1], tz="UTC"))]
@@ -430,9 +436,10 @@ def main():
         return
     FIG.mkdir(parents=True, exist_ok=True)
     borders, mainland = E.load_borders()
-    px = E.pixel_stats(sev)
+    px = E.pixel_stats(sev[sev["time_utc"] < pd.Timestamp(PERSISTENT_END, tz="UTC")])
     sev["event_id"], sev["nucleus_id"] = cluster(sev, nuclei=True)
-    sev["persistent"] = sev.merge(px[["lat", "lon", "persistent"]], on=["lat", "lon"], how="left")["persistent"].values
+    persistent = sev[["lat", "lon"]].merge(px[["lat", "lon", "persistent"]], on=["lat", "lon"], how="left")["persistent"]
+    sev["persistent"] = persistent.astype("boolean").fillna(False).astype(bool).values   # pixels first active later
     sev["in_pt"] = np.asarray(E.in_polygon(sev["lon"], sev["lat"], mainland))
     events = build_events(sev)
     nuclei = build_nuclei(sev)

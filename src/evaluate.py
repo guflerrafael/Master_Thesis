@@ -8,11 +8,15 @@ Matching, per 12 h target period, predictions in descending score order:
   - otherwise within k km of an *ignore* fire       -> ignored (neither TP nor FP)
   - otherwise                                       -> false positive (also duplicates)
 Predictions outside the loss mask (mainland Portugal + 1 px) are dropped.
+Second protocol (neutral_rekindles=True, notes.md 8.4): a prediction that matches no target and lies
+within k km of an ICNF rekindle record of its period (any size) is also 'ignored'. The default
+protocol is unchanged.
 
 Metrics per split: average precision (area under the precision-recall curve over all score
 thresholds), recall and precision with all predictions, the best F1 with its precision,
-recall and false alarms per day, the median error of true positives, recall by subgroup, and
-the distance from every target to the nearest prediction of its period (no matching).
+recall and false alarms per day, the median error of true positives, recall by subgroup (isolation, size class; with the SGIF fields also rekindle, cause type,
+fire-weather quartile and dominant land cover, see report_attrs), and the distance from every target
+to the nearest prediction of its period (no matching).
 """
 import numpy as np
 import pandas as pd
@@ -21,11 +25,34 @@ import eda_figures as E
 import grid as G
 
 
+# FWI quartiles of the ICNF fires >= 50 ha 2004-2023 (notes.md 8.4), fixed so that every split uses the same bins
+FWI_BINS = [0, 23.7, 32.8, 40.5, np.inf]
+FWI_LABELS = ["q1 (<23.7)", "q2 (23.7-32.8)", "q3 (32.8-40.5)", "q4 (>=40.5)"]
+REPORT_GROUPS = ("rekindle", "cause_type", "fwi_quartile", "cover")
+
+
 def _haversine(lat, lon, lats, lons):
     return E.haversine_km(lat, lon, np.asarray(lats), np.asarray(lons))
 
 
-def match(preds, data, periods, k_km):
+def report_attrs(fires):
+    """fires.parquet plus the reporting subgroups that need a derivation: rekindle (True / False /
+    unknown, the cause is often missing before 2008), FWI quartile, dominant land cover of the burned
+    area (>= 50 % forest / shrub / agricultural, else mixed). Builds without the SGIF fields are returned
+    unchanged."""
+    if "rekindle" not in fires:
+        return fires
+    a = fires.copy()
+    a["rekindle"] = a["rekindle"].astype(object).where(a["rekindle"].notna(), "unknown")
+    a["fwi_quartile"] = pd.cut(a["fwi"], FWI_BINS, labels=FWI_LABELS, right=False)
+    tot = a["burned_area_ha"]
+    a["cover"] = np.select([a["area_forest_ha"] >= 0.5 * tot, a["area_shrub_ha"] >= 0.5 * tot,
+                            a["area_agric_ha"] >= 0.5 * tot], ["forest", "shrub", "agric"], "mixed")
+    a.loc[a["area_forest_ha"].isna(), "cover"] = np.nan
+    return a
+
+
+def match(preds, data, periods, k_km, neutral_rekindles=False):
     """Status of every prediction in `periods` and the matched target of every true positive."""
     preds = preds.assign(period=pd.to_datetime(preds["period"], utc=True))   # all times are UTC
     preds = preds[preds["period"].isin(periods)].copy()
@@ -38,6 +65,7 @@ def match(preds, data, periods, k_km):
 
     lab = data.labels[data.labels["period"].isin(periods)].merge(data.fires[["fire_id", "lat", "lon"]], on="fire_id")
     lab_by = {p: g for p, g in lab.groupby("period")}
+    rk_by = {p: g for p, g in data.rekindles.groupby("period")} if neutral_rekindles else {}
     status, fire, err = [], [], []
     preds = preds.sort_values(["period", "score"], ascending=[True, False])
     for p, g in preds.groupby("period", sort=False):
@@ -53,7 +81,10 @@ def match(preds, data, periods, k_km):
                     m = int(d.argmin()); free[m] = False
                     status.append("tp"); fire.append(tg["fire_id"].iat[m]); err.append(d[m])
                     continue
+            rk = rk_by.get(p)
             if ig is not None and len(ig) and _haversine(q.lat, q.lon, ig["lat"], ig["lon"]).min() <= k_km:
+                status.append("ignored")
+            elif rk is not None and _haversine(q.lat, q.lon, rk["lat"], rk["lon"]).min() <= k_km:
                 status.append("ignored")
             else:
                 status.append("fp")
@@ -73,11 +104,12 @@ def average_precision(scored, n_targets):
     return ap, recall, precision, s["score"].values
 
 
-def evaluate(preds, data, split, k_km, groups=("isolated", "size_class"), periods=None):
-    """periods: optional subset of the split's periods (e.g. one year); default all periods."""
+def evaluate(preds, data, split, k_km, groups=("isolated", "size_class"), periods=None, neutral_rekindles=False):
+    """periods: optional subset of the split's periods (e.g. one year); default all periods.
+    neutral_rekindles: second protocol (module docstring)."""
     all_p = data.periods.loc[data.periods["split"] == split, "period"]
     periods = all_p if periods is None else all_p[all_p.isin(set(periods))]
-    scored, targets = match(preds, data, set(periods), k_km)
+    scored, targets = match(preds, data, set(periods), k_km, neutral_rekindles)
     n = len(targets)
     ap, rec, prec, thr = average_precision(scored, n)
     f1 = 2 * prec * rec / np.maximum(prec + rec, 1e-9)
@@ -98,7 +130,7 @@ def evaluate(preds, data, split, k_km, groups=("isolated", "size_class"), period
         "median error TP [km]": tp["err_km"].median(),
         "nearest pred ≤ 5 km": np.mean(nearest <= 5), "nearest pred median [km]": np.median(nearest),
     }
-    attrs = data.fires.set_index("fire_id").loc[targets["fire_id"]]
+    attrs = report_attrs(data.fires).set_index("fire_id").loc[targets["fire_id"]]
     hit = targets["fire_id"].isin(tp["fire_id"]).values
     for gname in groups:
         for val, h in pd.Series(hit, index=attrs[gname].astype(str).values).groupby(level=0):

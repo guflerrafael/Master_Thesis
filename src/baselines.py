@@ -9,7 +9,7 @@ of the 6 h tail), i.e. only information a model would also see. Variants:
   first-hour centroid           as 'no reappeared/persist.', location = FRP-weighted centroid
                                 of the nucleus' detections in its first hour
 
-The test split (2017-2019) is not evaluated here: it stays locked until the final comparison.
+The test split (tiling_design.SPLIT) is not evaluated here: it stays locked until the final comparison.
 
 Run from the repository root:
   .venv/bin/python src/baselines.py > outputs/baselines_log.txt
