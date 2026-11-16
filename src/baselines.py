@@ -8,6 +8,9 @@ of the 6 h tail), i.e. only information a model would also see. Variants:
   birth, no reappeared/persist. also without nuclei mostly on persistent off-season pixels
   first-hour centroid           as 'no reappeared/persist.', location = FRP-weighted centroid
                                 of the nucleus' detections in its first hour
+Every nucleus prediction also carries t_h = birth time + ACQ_OFFSET_H - period start [h] (time baseline
+of the space-time model, notes.md 9.4 item 11). Rule-based times for the peaks of a 2D model:
+first_detection_times(); the median lag of the training targets: training_lag_h().
 
 The test split (tiling_design.SPLIT) is not evaluated here: it stays locked until the final comparison.
 
@@ -25,7 +28,9 @@ import grid as G
 from build_dataset import period_of
 from dataset import FireData
 from evaluate import evaluate
-from tiling_design import PERIOD_H, TAIL_H
+from tiling_design import ACQ_OFFSET_H, PERIOD_H, TAIL_H
+
+R_TIME_PX = 1.5        # detections this close (cells) to a point give its time (notes.md 6.19)
 
 FIG = E.ROOT / "figures" / "baselines"
 SPLITS = ("train", "val")
@@ -54,8 +59,9 @@ def predictions(data):
         nu["lat_birth"], nu["lon_birth"] = G.sensor_to_true_latlon(nu["lat_birth"].values, nu["lon_birth"].values, nu["t_birth"])
         tb = birth.reindex(lat1h.index)
         lat1h[:], lon1h[:] = G.sensor_to_true_latlon(lat1h.values, lon1h.values, tb)
+    t_h = (nu["t_birth"] - nu["period"]).dt.total_seconds() / 3600 + ACQ_OFFSET_H
     base = pd.DataFrame({"period": nu["period"], "lat": nu["lat_birth"], "lon": nu["lon_birth"],
-                         "score": nu["nucleus_id"].map(score), "reappeared": nu["reappeared"],
+                         "score": nu["nucleus_id"].map(score), "t_h": t_h, "reappeared": nu["reappeared"],
                          "persistent": nu["share_persistent"] >= 0.5, "nucleus_id": nu["nucleus_id"]})
     clean = base[~base["reappeared"] & ~base["persistent"]]
     return {
@@ -65,6 +71,45 @@ def predictions(data):
         "first-hour centroid": clean.assign(lat=clean["nucleus_id"].map(lat1h).values,
                                             lon=clean["nucleus_id"].map(lon1h).values),
     }
+
+
+def _first_time(data, i, j, t0, t1, r_px=R_TIME_PX):
+    """First detection time (UTC) within r_px cells of (i, j) in [t0, t1), or NaT."""
+    t = data.det["time_utc"].values
+    a, b = np.searchsorted(t, np.array([t0.tz_convert(None), t1.tz_convert(None)], dtype="datetime64[ns]"))
+    near = np.hypot(data._i[a:b] - i, data._j[a:b] - j) <= r_px
+    return pd.Timestamp(t[a:b][near][0], tz="UTC") if near.any() else pd.NaT
+
+
+def first_detection_times(points, data, lag_h=0.0):
+    """Rule-based ignition time of predicted points (period, lat, lon in the TRUE frame): first detection
+    within R_TIME_PX cells of the point in [period - 1 h, period + PERIOD_H + TAIL_H) + ACQ_OFFSET_H - lag_h,
+    in hours since the period start, clipped to [0, PERIOD_H]. A place that was already burning gets
+    an early time (often 0): the rule cannot see a new ignition in an active fire. Returns a copy of
+    points with t_h (NaN without a detection)."""
+    pts = points.assign(period=pd.to_datetime(points["period"], utc=True)).copy()
+    i, j = G.latlon_to_ij(pts["lat"].values, pts["lon"].values)
+    if data.georef_fix:                                      # detections are in the sensor frame
+        i, j = G.true_to_sensor_ij(i, j, pts["period"])
+    out = []
+    for p, a, b in zip(pts["period"], i, j):
+        f = _first_time(data, a, b, p - pd.Timedelta(hours=1), p + pd.Timedelta(hours=PERIOD_H + TAIL_H))
+        out.append(np.nan if pd.isna(f) else (f - p).total_seconds() / 3600 + ACQ_OFFSET_H - lag_h)
+    pts["t_h"] = np.clip(out, 0, PERIOD_H)
+    return pts
+
+
+def training_lag_h(data, split="train"):
+    """Median of (first detection within R_TIME_PX cells of the ICNF point in [start - 1 h, start + 6 h)
+    + ACQ_OFFSET_H - ICNF start) over the targets of `split` [h]: the systematic delay between the ICNF
+    alert time and the first SEVIRI observation, to subtract from rule-based times."""
+    lab = data.labels[(data.labels["role"] == "target")
+                      & data.labels["period"].isin(data.periods.loc[data.periods["split"] == split, "period"])]
+    start = lab["fire_id"].map(data.fires.set_index("fire_id")["start_utc"])
+    lags = [(f - s).total_seconds() / 3600 + ACQ_OFFSET_H
+            for s, a, b in zip(start, lab["i_f"], lab["j_f"])
+            if not pd.isna(f := _first_time(data, a, b, s - pd.Timedelta(hours=1), s + pd.Timedelta(hours=6)))]
+    return float(np.median(lags))
 
 
 def main():

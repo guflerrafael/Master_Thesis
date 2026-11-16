@@ -6,6 +6,10 @@ target period. Readout 'last' (v1/v2): head on the final hidden state of the top
 'mean': head on the maximum / mean of the top hidden state over all steps.
 TemporalCNN3D: non-recurrent comparison model (3D convolutions over time and space, then max and
 mean over time), for the ablation "is the recurrent memory needed?".
+TemporalCNN3DST ('cnn3d_st', notes.md 9.4 / 9.6): space-time ignition maps, one per hour of the target
+period. Encoder of TemporalCNN3D, a decoder along time (nearest upsampling + Conv3d, skips), global
+context (max and mean over time) copied to every hour, per-hour head; plus the 2D head of
+TemporalCNN3D on the global context (auxiliary output, aux2d=True).
 All models are fully convolutional: trained on crops, applied to the full grid.
 
 build_model(cfg) creates the model of a training configuration (see train.DEFAULTS).
@@ -81,8 +85,47 @@ class TemporalCNN3D(nn.Module):
         return self.head(torch.cat([z.amax(2), z.mean(2)], 1)).squeeze(1)
 
 
+class TemporalCNN3DST(nn.Module):
+    """(B, T, C, H, W) -> logits (B, K, H, W) for the K = period_steps model steps of the target period
+    (input steps hist_steps .. hist_steps + K - 1), and with aux2d also the 2D logits (B, H, W)."""
+
+    def __init__(self, in_ch, width=32, hist_steps=6, period_steps=12, prior=0.01, aux2d=True):
+        super().__init__()
+        self.a, self.b = hist_steps, hist_steps + period_steps
+        self.e1 = nn.Sequential(nn.Conv3d(in_ch, 16, 3, padding=1), nn.ReLU())
+        self.e2 = nn.Sequential(nn.Conv3d(16, width, 3, padding=1, stride=(2, 1, 1)), nn.ReLU())
+        self.e3 = nn.Sequential(nn.Conv3d(width, width, 3, padding=1, stride=(2, 1, 1)), nn.ReLU())
+        self.d2 = nn.Sequential(nn.Conv3d(2 * width, width, 3, padding=1), nn.ReLU())
+        self.d1 = nn.Sequential(nn.Conv3d(width + 16, 16, 3, padding=1), nn.ReLU())
+        self.head = nn.Sequential(nn.Conv3d(16 + 2 * width, 32, (1, 3, 3), padding=(0, 1, 1)), nn.ReLU(),
+                                  nn.Conv3d(32, 1, 1))
+        _init_prior(self.head[-1], prior)
+        self.head2d = None
+        if aux2d:
+            self.head2d = nn.Sequential(nn.Conv2d(2 * width, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 1, 1))
+            _init_prior(self.head2d[-1], prior)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1, 3, 4)                         # (B, C, T, H, W)
+        e1 = self.e1(x); e2 = self.e2(e1); e3 = self.e3(e2)
+        g = torch.cat([e3.amax(2), e3.mean(2)], 1)           # global context (B, 2 width, H, W)
+        up = lambda z, ref: F.interpolate(z, size=ref.shape[2:], mode="nearest")   # no transposed conv (9.4, item 4)
+        d2 = self.d2(torch.cat([up(e3, e2), e2], 1))
+        d1 = self.d1(torch.cat([up(d2, e1), e1], 1))[:, :, self.a:self.b]
+        z = torch.cat([d1, g[:, :, None].expand(-1, -1, d1.shape[2], -1, -1)], 1)
+        out = self.head(z).squeeze(1)
+        return out if self.head2d is None else (out, self.head2d(g).squeeze(1))
+
+
 def build_model(cfg):
     in_ch = len(cfg["channels"])
+    if cfg["arch"] == "cnn3d_st":
+        steps = cfg["step_agg"]
+        assert (cfg["history_h"] * 4) % steps == 0 and 48 % steps == 0
+        k = 48 // steps                                      # model steps in the 12 h period
+        assert cfg["time_bins"] == k, f"cnn3d_st outputs one map per model step: time_bins must be {k}"
+        return TemporalCNN3DST(in_ch, width=cfg["hidden"], hist_steps=cfg["history_h"] * 4 // steps, period_steps=k,
+                               aux2d=cfg["aux2d_weight"] > 0)
     if cfg["arch"] == "cnn3d":
         return TemporalCNN3D(in_ch, width=cfg["hidden"])
     return IgnitionConvLSTM(in_ch, hid=(cfg["hidden"],) * cfg["layers"], kernel=cfg["kernel"], readout=cfg["readout"])

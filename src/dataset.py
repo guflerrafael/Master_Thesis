@@ -9,6 +9,14 @@ A sample is one 12 h target period:
                             within TARGET_CORE px of a target (targets win over ignore regions);
                             optionally also 0 around every ICNF rekindle record of the period
                             (rekindle_ignore, ablation of notes.md 8.6)
+Space-time targets (time_bins = K > 0, notes.md 9.4 / 9.6): y and w become pairs (y3, y2), (w3, w2):
+  y3 (K, h, w)    max of Gaussians in space (sigma) x time (sigma_t, hours) at every target, centred
+                  on its ICNF start in hours since the period start; bin k covers
+                  [k, k + 1) x 12 / K hours, value at the bin centre
+  w3 (K, h, w)    ignore discs as in w, over all bins (scoring ignores by place only); the 'targets
+                  win' rule holds only for the bins whose centre is within 2 sigma_t of the target's
+                  start, so another fire's start hour is not trained as 'no ignition'
+  y2, w2          the 2D y and w above (auxiliary 2D head), identical to time_bins = 0
 for the full grid (177 x 106) or a crop (i0, j0, size). Framework-free (numpy).
 
 Run from the repository root (checks + example figure):
@@ -32,6 +40,7 @@ T = (HISTORY_H + PERIOD_H + TAIL_H) * 4
 CHANNELS = ("frp", "confidence", "detected")
 FRP_NORM = np.log1p(1100.0)
 SIGMA, IGNORE_R, TARGET_CORE = 1.0, 2.0, 1.0
+SIGMA_T = 1.0                  # space-time targets: width in time [h] (notes.md 9.2)
 
 
 class FireData:
@@ -56,16 +65,18 @@ class FireData:
         t = self.det["time_utc"]
         self._birth = (t == t.groupby(self.det["nucleus_id"]).transform("min")).values
         self._area = self.fires.set_index("fire_id")["burned_area_ha"]
+        self._start = self.fires.set_index("fire_id")["start_utc"]
 
     @staticmethod
     def first_slot(period):
         return (pd.Timestamp(period) - pd.Timedelta(hours=HISTORY_H)).value // (15 * 60 * 10**9)
 
     def sample(self, period, crop=None, sigma=SIGMA, ignore_r=IGNORE_R, min_target_ha=None, births=False,
-               rekindle_ignore=False):
+               rekindle_ignore=False, time_bins=0, sigma_t=SIGMA_T):
         """Defaults reproduce the v1/v2 samples. births=True appends a 4th input channel (nucleus
         birth flag); min_target_ha turns smaller targets into ignore regions; rekindle_ignore=True
-        adds an ignore region (radius ignore_r) at every rekindle record of the period, of any size."""
+        adds an ignore region (radius ignore_r) at every rekindle record of the period, of any size;
+        time_bins = K > 0 returns space-time targets (module docstring)."""
         i0, j0, h, w = (0, 0, G.H, G.W) if crop is None else (crop[0], crop[1], crop[2], crop[2])
         s0 = self.first_slot(period)
         a, b = np.searchsorted(self._slot, [s0, s0 + T])
@@ -89,19 +100,38 @@ class FireData:
             lab.loc[small, "role"] = "ignore"
         r, c = np.mgrid[0:h, 0:w]
         core = np.zeros((h, w), bool)
+        drop = np.zeros((h, w), bool)            # ignore discs
+        tgs = []                                 # (spatial Gaussian, core mask, fire_id) per target
         for q in lab.itertuples():
             d2 = (r - q.i_loc) ** 2 + (c - q.j_loc) ** 2
             if q.role == "target":
-                y = np.maximum(y, np.exp(-d2 / (2 * sigma ** 2)).astype(np.float32))
+                g = np.exp(-d2 / (2 * sigma ** 2)).astype(np.float32)
+                y = np.maximum(y, g)
                 core |= d2 <= TARGET_CORE ** 2
+                tgs.append((g, d2 <= TARGET_CORE ** 2, q.fire_id))
             else:
-                wt[d2 <= ignore_r ** 2] = 0.0
+                drop |= d2 <= ignore_r ** 2
         if rekindle_ignore:
             for q in self._rk.get(pd.Timestamp(period), self.rekindles.iloc[:0]).itertuples():
-                wt[(r - (q.i_f - i0)) ** 2 + (c - (q.j_f - j0)) ** 2 <= ignore_r ** 2] = 0.0
-        wt[core] = self.static["pt_loss"][i0:i0 + h, j0:j0 + w][core]
+                drop |= (r - (q.i_f - i0)) ** 2 + (c - (q.j_f - j0)) ** 2 <= ignore_r ** 2
+        pt = self.static["pt_loss"][i0:i0 + h, j0:j0 + w].astype(np.float32)
+        wt[drop] = 0.0
+        wt[core] = pt[core]
         inside = lab["i_loc"].between(-0.5, h - 0.5) & lab["j_loc"].between(-0.5, w - 0.5)
-        return x, y, wt, lab[inside]
+        if not time_bins:
+            return x, y, wt, lab[inside]
+
+        tc = (np.arange(time_bins) + 0.5) * (PERIOD_H / time_bins)          # bin centres [h since period start]
+        y3 = np.zeros((time_bins, h, w), np.float32)
+        w3 = np.repeat(np.where(drop, 0.0, pt)[None], time_bins, 0).astype(np.float32)
+        p0 = pd.Timestamp(period)
+        for g, cr, fid in tgs:
+            t_h = (self._start[fid] - p0).total_seconds() / 3600
+            gt = np.exp(-(tc - t_h) ** 2 / (2 * sigma_t ** 2)).astype(np.float32)
+            y3 = np.maximum(y3, gt[:, None, None] * g[None])
+            for k in np.nonzero(np.abs(tc - t_h) <= 2 * sigma_t)[0]:
+                w3[k][cr] = pt[cr]
+        return x, (y3, y), (w3, wt), lab[inside]
 
 
 def crop_origin(i, j, size, rng=None, jitter=0):

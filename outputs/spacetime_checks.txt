@@ -1,0 +1,44 @@
+A  1,396 periods, 3,142 targets (K = 12, sigma_t = 1.0 h, positive threshold 0.667)
+   targets without a positive voxel: 0; without a positive voxel of weight > 0: 0; positive voxels per target: mean 3.03, min 1
+   cells with max_k y3 > y2: 0; voxels with w3 > w2: 0; periods whose 2D part differs from the time_bins = 0 sample: 0
+
+B  flips on 200 training crops (both axes): hour, value, weight or input changed at the target: 0
+
+C  synthetic Gaussians (t in [1, 11) h, 2000): |time error| max 6.80e-08 h; position minus 2D decoder in the same bin: max 0.00e+00 cells
+   decoding '3d' of the validation target tensors: nearest peak <= 0.5 cells for 97.8% of 403 targets; |time error| of those: median 0.000 h, <= 0.25 h 94.4%, max 1.19 h
+   decoding 'max' of the validation target tensors: nearest peak <= 0.5 cells for 95.5% of 403 targets; |time error| of those: median 0.000 h, <= 0.25 h 93.8%, max 8.37 h
+   D2 equals the 2D decoder applied to max_k y3: 100% of periods
+
+D/E  acquisition offset 10 min; median lag first detection (+ offset) - ICNF start, train targets: +0.38 h
+
+   cnn3d_final_s0: 4,238 points, 2.5% without a detection within 1.5 cells
+   cnn3d_final_s1: 3,988 points, 3.5% without a detection within 1.5 cells
+   cnn3d_final_s2: 6,000 points, 21.9% without a detection within 1.5 cells
+
+Validation 2015-2016 (cnn3d_final: mean ± std over 3 seeds; baseline deterministic):
+                                                          AP      stored_AP         recall median |dt| [h]   median dt [h]    |dt| <= 1 h    |dt| <= 2 h     AP tau=1 h     AP tau=2 h     AP tau=3 h
+method                                     k                                                                                                                                                         
+nucleus birth                              5     0.448 ± 0.0                   0.712 ± 0.0     0.467 ± 0.0      0.35 ± 0.0    0.693 ± 0.0    0.843 ± 0.0    0.266 ± 0.0    0.352 ± 0.0    0.391 ± 0.0
+                                           10    0.577 ± 0.0                   0.804 ± 0.0       0.5 ± 0.0       0.3 ± 0.0    0.679 ± 0.0     0.83 ± 0.0    0.332 ± 0.0    0.448 ± 0.0      0.5 ± 0.0
+nucleus birth, lag removed                 5     0.448 ± 0.0                   0.712 ± 0.0     0.367 ± 0.0    -0.033 ± 0.0    0.746 ± 0.0    0.864 ± 0.0    0.292 ± 0.0    0.359 ± 0.0    0.391 ± 0.0
+                                           10    0.577 ± 0.0                   0.804 ± 0.0       0.4 ± 0.0    -0.083 ± 0.0    0.722 ± 0.0    0.846 ± 0.0    0.359 ± 0.0    0.447 ± 0.0    0.503 ± 0.0
+cnn3d_final (no time)                      5   0.635 ± 0.008  0.635 ± 0.008   0.84 ± 0.004                                                                                                           
+                                           10  0.704 ± 0.001  0.704 ± 0.001  0.897 ± 0.008                                                                                                           
+cnn3d_final + first detection              5   0.635 ± 0.008                  0.84 ± 0.004    0.544 ± 0.01   0.267 ± 0.017  0.647 ± 0.005  0.791 ± 0.004   0.366 ± 0.01  0.478 ± 0.008  0.535 ± 0.009
+                                           10  0.704 ± 0.001                 0.897 ± 0.008   0.567 ± 0.017    0.256 ± 0.01  0.632 ± 0.005  0.766 ± 0.007  0.405 ± 0.002  0.522 ± 0.003  0.589 ± 0.004
+cnn3d_final + first detection, lag removed 5   0.635 ± 0.008                  0.84 ± 0.004    0.411 ± 0.01  -0.114 ± 0.013  0.682 ± 0.003   0.81 ± 0.002  0.393 ± 0.009  0.484 ± 0.008  0.535 ± 0.008
+                                           10  0.704 ± 0.001                 0.897 ± 0.008     0.417 ± 0.0   -0.122 ± 0.01  0.664 ± 0.007  0.787 ± 0.006  0.437 ± 0.004  0.533 ± 0.003   0.59 ± 0.005
+
+median |dt| of the hits by subgroup [h]:
+                                              |dt| isolated=False |dt| isolated=True |dt| in_pair=False |dt| in_pair=True |dt| already_burning=False |dt| already_burning=True |dt| rekindle=False |dt| rekindle=True
+method                                     k                                                                                                                                                                         
+nucleus birth                              5           0.55 ± 0.0        0.367 ± 0.0        0.467 ± 0.0        0.45 ± 0.0                0.425 ± 0.0                 1.5 ± 0.0          0.45 ± 0.0        1.142 ± 0.0
+                                           10         0.583 ± 0.0        0.367 ± 0.0          0.5 ± 0.0       0.583 ± 0.0                0.442 ± 0.0                 1.2 ± 0.0          0.45 ± 0.0        1.117 ± 0.0
+nucleus birth, lag removed                 5          0.458 ± 0.0         0.25 ± 0.0        0.358 ± 0.0         0.7 ± 0.0                0.333 ± 0.0               1.883 ± 0.0          0.35 ± 0.0        1.217 ± 0.0
+                                           10         0.467 ± 0.0         0.25 ± 0.0        0.383 ± 0.0         0.7 ± 0.0                 0.35 ± 0.0               1.583 ± 0.0         0.383 ± 0.0        1.167 ± 0.0
+cnn3d_final (no time)                      5                                                                                                                                                                         
+                                           10                                                                                                                                                                        
+cnn3d_final + first detection              5           0.65 ± 0.0       0.356 ± 0.01       0.528 ± 0.01     1.464 ± 0.437               0.456 ± 0.01             1.828 ± 0.077       0.528 ± 0.005      1.256 ± 0.241
+                                           10        0.678 ± 0.01      0.361 ± 0.005       0.539 ± 0.01     2.078 ± 0.326              0.458 ± 0.014             1.978 ± 0.063       0.542 ± 0.008      1.339 ± 0.154
+cnn3d_final + first detection, lag removed 5        0.556 ± 0.025         0.25 ± 0.0       0.394 ± 0.01     1.592 ± 0.359               0.344 ± 0.01             2.053 ± 0.149        0.394 ± 0.01      1.514 ± 0.125
+                                           10        0.589 ± 0.01         0.25 ± 0.0      0.414 ± 0.005     1.892 ± 0.217                 0.35 ± 0.0             2.303 ± 0.021           0.4 ± 0.0       1.606 ± 0.01

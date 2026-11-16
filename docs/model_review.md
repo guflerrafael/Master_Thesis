@@ -113,6 +113,7 @@ At least ~58 % of the "false" alarms sit where something was actually burning. T
 - **Cheaper variant:** keep the 2D heatmap and add an ignition-time regression head (L1 at target pixels) plus a 2-channel offset head (CenterNet). This gives the time estimate but does not separate merged peaks.
 - **Literature:** this is the temporal analogue of CenterNet keypoints. It is close in spirit to per-pixel burn dating (Pinto et al. 2020, BA-Net) and fire-arrival-time estimation (Farguell et al. 2021; Shaddy et al. 2025), where the ignition is the earliest point of a space–time field.
 - **Risk:** ICNF start times are uncertain by ~0.5–1 h (notes §1.4, §5.1), so use σ_t ≥ 1 h and do not require exact timing. Expected gain: up to roughly +0.04–0.06 recall @ 10 km if half of the close-pair misses are recovered. This is a rough estimate, not a measurement.
+- **Update 2026-11-13:** checked against the data and turned into a revised implementation plan in notes §9. At the level of the target tensor the time axis makes 11 of the 22 unrepresentable validation targets representable (2.7 points of recall); expected gain +1 to +4 points recall @ 10 km, with the ignition time as the main return.
 
 ### 4.2 Use more of the labels: size-aware targets
 - Training sees 1,979 targets ≥ 50 ha. The **2,163 seen 10–50 ha training fires are ignore regions**, but they are exactly what produces 30 % of the false alarms at inference.

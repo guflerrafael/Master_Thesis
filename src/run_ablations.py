@@ -68,6 +68,8 @@ EXPERIMENTS = {
     "cnn3d_final":      (4, "--arch cnn3d --neg-ratio 2", "3D-CNN candidate: no recurrence + 2 negatives"),
     # ---- ICNF SGIF export (notes.md 8.6)
     "cnn3d_final_rk":   (5, "--arch cnn3d --neg-ratio 2 --rekindle-ignore", "cnn3d_final + ignore regions at all rekindle records"),
+    # ---- space-time ignition maps (notes.md 9.6, step 2: first run; step 3: ablations)
+    "cnn3d_st":         (6, "--arch cnn3d_st --time-bins 12 --sigma-t 1 --neg-ratio 2", "space-time 3D CNN, 12 hourly maps + 2D head, 2 negatives"),
 }
 SMOKE = "--epochs 1 --max-batches 3 --val-periods 10"
 

@@ -1,0 +1,3 @@
+1 runs (1 experiments × 1 seeds) -> models/ablations_st/, outputs/ablations_st/
+[1/1] ablations_st/cnn3d_st_s0: space-time 3D CNN, 12 hourly maps + 2D head, 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_st/cnn3d_st_s0 --seed 0 --arch cnn3d_st --time-bins 12 --sigma-t 1 --neg-ratio 2
+    ok in 111.0 min (total 111 min)

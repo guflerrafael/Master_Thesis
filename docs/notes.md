@@ -54,6 +54,9 @@ Run from the repository root, in this order:
 21. `.venv/bin/python src/time_target_analysis.py > outputs/time_target_analysis.txt`: can the ignition time be a target? (6.19)
 22. `.venv/bin/python src/download_msg_frp.py`, then `src/download_msg_frp.py --merge`: SEVIRI 2020–2025 from LSA SAF (needs a login), before step 1 (7)
 23. `.venv/bin/python src/check_new_years.py > outputs/new_years_check.txt`: data checks of the extension to 2020–2025 and regression against the 2004–2019 build, after step 9 (7–8)
+24. `.venv/bin/python src/spacetime_checks.py > outputs/spacetime_checks.txt`: checks of the space-time targets, decoder and evaluation, time baselines (9.9)
+25. `.venv/bin/python src/run_ablations.py --only cnn3d_st --seeds 0 --folder ablations_st`, then `.venv/bin/python src/spacetime_eval.py ablations_st/cnn3d_st_s0 > outputs/spacetime_eval_s0.txt`: space-time model, validation by decoding, subgroup and time error (9.11)
+26. `.venv/bin/python src/plot_spacetime_examples.py`: example periods of `cnn3d_st` next to `cnn3d_final`, validation only (9.12)
 
 Since 2026-11-13 steps 1, 7, 9 and 10 use 2004–2025 (8.8); `src/clean_data.py` reads the ICNF SGIF export (`data/raw/icnf/`), which is not versioned.
 
@@ -1591,3 +1594,292 @@ What is not done:
 - The period-level bootstrap and the AP per satellite period planned for `evaluate_test.py` are not implemented yet.
 - The tiling-design numbers (`outputs/tiling_design_log.txt`) now cover 2004–2025; they compare ICNF and SEVIRI without the geo-referencing correction, as before (6.12).
 
+
+## 9. Space–time ignition heatmap: review of the concept and revised implementation plan (2026-11-13)
+
+Status: **review and plan only; no file in `src/` has changed and nothing was trained.** The first plan (2026-10-29, after 6.19) existed only in the chat of that session; this section replaces it. Numbers marked [check] come from scratch scripts on the current build (2004–2025), **test split 2024–2025 excluded everywhere** (3,142 targets: train 1,979, val 403, train2 439, train3 321); step 0 of 9.6 moves them to `src/`. Model-level numbers use the saved validation predictions of 6.20 (`outputs/cloud/val_preds_s0-2.parquet`, `ablations_georef/cnn3d_final_s0-2`); they reproduce AP 0.635 / 0.704. Model sizes and step times were measured with a throwaway prototype on the M1 (batch 16, 24 × 7 × 32 × 32).
+
+### 9.1 Verdict
+
+- **The concept is sound and worth building, but its main return is the ignition time, not AP.** The output goes from one map per 12 h period to one map per hour, `(12, H, W)`; each target is a Gaussian in space (σ = 1 px) and time (σ_t = 1 h) at its ICNF start.
+- **Expected gain in recall is small and uncertain: about +1 to +4 points @ 10 km on validation, AP +0.00 to +0.02, with a real risk of a small loss.** The reasons are in 9.2.
+- **Four points of the first plan need changing** (9.4): the positive-voxel rule, the loss weight, the flips, and the final training / test (the split has changed since). Two additions lower the risk a lot: an auxiliary 2D head and a "collapsed" decoding, which together show whether the time axis costs or adds accuracy.
+
+### 9.2 Checks of the assumptions [check]
+
+**Close pairs** (two targets ≤ 2 px apart in one period):
+
+| Split | Pairs | Targets involved | Start difference, median | ≥ 1 h | ≥ 2 h |
+|---|---|---|---|---|---|
+| train | 139 | 239 of 1,979 (12.1 %) | 1.50 h | 60 % | 42 % |
+| val | 36 | 52 of 403 (12.9 %) | 2.42 h | 72 % | 58 % |
+| train2 | 21 | 35 of 439 (8.0 %) | 1.77 h | 62 % | 48 % |
+| train3 | 8 | 13 of 321 (4.0 %) | 3.09 h | 62 % | 62 % |
+| all | 204 | 339 of 3,142 (10.8 %) | 1.75 h | 62 % | 47 % |
+
+train + val give the 175 pairs / 291 targets of 6.19. The later fire of a pair is a recorded rekindle in 11.8 % of the pairs (cause unknown in 20.6 %); rekindles are 11.8 % of the in-pair targets with known cause and 6.8 % of the others.
+
+**What the target tensor itself can represent.** A target counts as representable if the target tensor has a local maximum that can be assigned to it one to one (≤ 1.5 px, and ≤ 1.5 bins in time). This is an upper bound that needs no model.
+
+| Target tensor (σ = 1 px) | All targets | In a close pair (339) | val, in a pair (52) |
+|---|---|---|---|
+| 2D (now), 3 × 3 peaks | 95.6 % | 59.3 % | 57.7 % |
+| 3D, 1 h bins, σ_t = 1 h, 3 × 3 × 3 peaks | 97.7 % | 79.1 % | 78.8 % |
+| same, σ_t = 0.5 / 0.75 / 2 h | 97.5 / 97.7 / 97.7 % | 78.2 / 79.1 / 78.8 % | 78.8 / 78.8 / 76.9 % |
+| same, peak window 5 h × 3 × 3 | 97.0 % | 72.6 % | 73.1 % |
+| 3D, 2 h bins (σ_t = 1 / 2 h) | 96.3 / 96.7 % | 67.6 / 69.6 % | 73.1 / 71.2 % |
+
+- Targets without an own peak: 139 → 72 (all), **22 → 11 on validation**. The time axis halves this group; it does not remove it (pairs less than about 1.5 h and 1 px apart stay merged).
+- **1 h bins are needed.** 2 h bins recover only about half as many in-pair targets (59 → 68–70 % instead of 79 %). The "6 × 2 h" variant of the first plan is therefore not a cheap equivalent.
+- A peak window of 5 h in time loses a third of the gain. σ_t does not change what the target can represent; it only matters for how sharp the model's output is.
+- 4 validation targets have an own peak in 2D but not in 3D (a start near a bin edge lowers the peak below a neighbour's shoulder). The net gain is the 22 → 11 above.
+
+**Where the current model misses** (validation, `cnn3d_final`, mean of 3 seeds, all predictions):
+
+| Group | Targets | Recall @ 5 km | Recall @ 10 km | Missed @ 10 km |
+|---|---|---|---|---|
+| own 2D peak, not in a pair | 351 | 0.91 | 0.97 | 12.3 |
+| own 2D peak, in a pair | 30 | 0.22 | 0.32 | 20.3 |
+| no 2D peak, own 3D peak | 15 | 0.51 | 0.56 | 6.7 |
+| no 2D peak, no 3D peak | 7 | 0.67 | 0.71 | 2.0 |
+| already burning (detection ≤ 1.5 px, 6 h – 30 min before the start) | 93 | 0.60 | 0.70 | 28.3 |
+| fresh | 310 | 0.91 | 0.96 | 13.0 |
+| all | 403 | 0.84 | 0.90 | 41.3 |
+
+- 29 of the 41 misses @ 10 km are in-pair targets (as in `model_review.md` §3.3). **But 20 of them have an own peak in the 2D target**: the target can already represent them, and the model still gives too few peaks. These are dense clusters (outbreak days), where the predicted map is broader than the target. A time axis helps there only if the model separates the fires in time; this is the uncertain part.
+- So the guaranteed part of the gain is small (11 validation targets = 2.7 points of recall become representable), and the possible part is larger (up to the 29 in-pair misses = 7 points).
+- Recall of fresh targets outside pairs is 0.98–1.00 for every hour of the period, also the last three. **The 6 h tail is not a limit**; a longer tail is not needed for this model.
+
+**Timing of the label against the input.**
+- First detection ≤ 1.5 px minus ICNF start, targets not already burning (2,562): median +0.30 h, IQR +0.02 … +1.12 h, p90 +2.60 h; robust SD 0.82 h, 78 % within ±1 h of the median. So **σ_t = 1 h matches the spread of the labels.**
+- The same in hourly bins: the first detected hour is the ICNF hour for 48 %, one hour later for 28 %, **two or more hours later for 22 %** (earlier for 2 %). For that 22 % the positive voxel lies at an hour where the input shows nothing at that place, and the hour where the fire appears is an almost fully penalised negative (target value 0.14 at 2 h, 0.01 at 3 h). The model cannot know this delay, so it will spread its probability over several hours: **lower and less reliable peak scores than in 2D, where time is summed away.** This is the main new risk for AP. Remedies: the auxiliary 2D head and the score options in 9.4.
+- Already burning: 18.5 % of all targets (train 19.3 %, val 23.1 %, train2 14.8 %, train3 12.8 %).
+- **Acquisition time.** The product field `ACQTIME` is the slot label + 10 min over Portugal (+ 11 min north of about 42° N; 15,069 rows of 2020–2023). SEVIRI scans from south to north, so every `time_utc` is about 10 min early. The true lag between ICNF start and first detection is therefore about 0.35 h (all targets), not 0.18 h. The model learns this offset by itself; **the rule-based time baselines must add it**, and the thesis text ("seen 10–20 min after the start") should say 20–30 min.
+
+**Duplicate peaks in time.** Share of targets whose place (≤ 1.5 px) lights up again after more than 2 empty hours: 12.9 % anywhere in the window, **4.8 % inside the 12 h period** (1.8 % after more than 3 h). On validation that is at most about 19 possible extra false alarms, against 76 at the best-F1 point of the seed ensemble (`model_review.md` §3.4). Some of them are recorded rekindles.
+
+**Ignore regions.** 325 targets (10.3 %) have an ignore fire ≤ 2 px away in the same period; the 1 px core of 525 targets (16.7 %) touches an ignore disc. For 49 % of the 325 the nearest ignore fire starts ≥ 2 h from the target. With the first plan (2D weight copied to all hours, core kept at weight 1) the model would be trained to output "no ignition" at the place and hour where such an ignore fire started. In 2D this conflict cannot occur.
+
+**Start hour by period.** 76 % of the targets start in a 06–18 UTC period. Day periods: 73 % start in hours 5–9. Night periods: 51 % start in hours 0–3. The input has no channel that tells the two period types apart.
+
+**Positive voxels.** With σ = 1 px, σ_t = 1 h and the threshold 0.75, 1.1 % of the targets have no positive voxel (worst case 0.687, as the first plan said; smallest value in the data 0.698).
+
+### 9.3 Where gains can be expected
+
+| Area | Expectation | Basis |
+|---|---|---|
+| Ignition time for every predicted fire | new output; median error about 0.4–0.6 h and about 70–75 % within 1 h for fresh fires, clearly worse for the 18.5 % already burning | lag spread above; 6.19 |
+| Fires in close pairs / clusters | +1 to +4 points recall @ 10 km on validation (4–16 targets), almost all in non-isolated fires | 22 → 11 representable; 29 in-pair misses |
+| AP @ 5 / 10 km | +0.00 to +0.02; can turn negative through diluted scores and duplicates | 9.2 |
+| Localisation error | none (floor 1.6 km, `model_review.md` §3.5) | – |
+| Fresh, isolated fires | none (recall already 0.97–0.99) | – |
+| Training data | train2 + train3 add 29 pairs and 760 targets; the 3,418 seen 10–50 ha fires would double the positives (9.5) | – |
+
+### 9.4 Changes to the first plan
+
+1. **Positive voxels: scale the threshold, do not set the nearest voxel to 1.** `pos_threshold(σ, σ_t, bin) = min(0.75, 0.97 · exp(−0.25/σ² − 0.125 · bin²/σ_t²))` = 0.667 for σ = 1 px, σ_t = 1 h, 1 h bins. Every target then has at least one positive voxel (mean 3.05 for uniform sub-pixel and sub-hour offsets; 2D now 1.81). This extends the existing `pos_threshold(σ)` and keeps the target an exact Gaussian, which the sub-pixel decoder relies on. Setting the nearest voxel to 1 (first plan) stays as an ablation.
+2. **Loss weight is 3D.** Ignore discs stay purely spatial over all 12 hours, as the scoring ignores by place only. The rule "targets win" becomes local in time: the weight is restored within 1 px of a target only for the hours with |hour centre − start| ≤ 2 σ_t. Reason: the ignore-region check in 9.2.
+3. **Flips: explicit spatial axes.** `CropSet.__getitem__` flips `y[:, ::-1]` and `y[::-1]`. On a `(12, h, w)` target these would flip north–south instead of east–west, and **time** instead of north–south, without an error. Use `[..., ::-1]` and `[..., ::-1, :]` for y and w, and add a check that the target hour is unchanged by both flips.
+4. **Decoder of the network: upsample + convolution, not transposed convolution.** A transposed convolution with stride 2 and kernel 3 covers the output steps unevenly; an alternating pattern along time would create false local maxima exactly where the peaks are read. The figure (`model_cnn3d_st`) already shows upsample + Conv3d.
+5. **Auxiliary 2D head (new).** The existing `cnn3d` head on the global context (max and mean over time), trained with the existing 2D target and weight; loss = 3D loss + 2D loss. No extra run time, +18,497 parameters (162,258 in total; 143,761 without, which confirms the "≈ 140k" of the figure). It gives (a) a guard: its AP must match `cnn3d_final` (0.635 ± 0.008 / 0.704 ± 0.001), otherwise the shared encoder has been harmed; (b) a score that is not diluted by the time uncertainty; (c) the comparison "does the time task help the place task".
+6. **Three decodings from the same run (new), none needs retraining:** D0 = 2D head with the current decoder; D1 = 3D peaks (3 × 3 × 3, p ≥ 0.05); D2 = maximum over the hours, then the current 2D decoder. D1 − D2 is what the time axis adds at decoding; D0 against `cnn3d_final` is the guard.
+7. **Score and duplicates as decode-only ablations (new):** peak value (default); noisy-OR over the peak hour ± 1 h; peak value × 2D-head probability. Duplicate rule: drop a peak that has a stronger peak within 1 px and τ hours, τ = 1 (the default 3 × 3 × 3), 2, 3.
+8. **Time of a peak:** log-parabola through the three hours at the peak pixel (exact for a Gaussian), `t_h = k + 0.5 + δ`; δ = 0 at the first and last hour. Space: the current 3 × 3 centroid inside the peak's hour, so that D1 and D2 differ only in the time axis.
+9. **Hourly bins only** as the main model (9.2). 2 h bins stay as one ablation.
+10. **Period-type channel (new, ablation):** `day` = 1 for 06–18 UTC periods, so the model can use the different start-hour distributions.
+11. **Time baselines:** nucleus birth and "first detected hour ≤ 1.5 px from a `cnn3d_final` peak", both + 10 min acquisition offset, and both also with the median lag of the training years removed.
+12. **Evaluation:** primary protocol unchanged (place only; every old number must be reproduced). New: time error of the hits (median, ≤ 1 h, ≤ 2 h) by isolated / with neighbours / already burning / in a pair / rekindle; AP with a time tolerance (hit needs ≤ k km and |Δt| ≤ τ, τ = 1, 2, 3 h; the action-spotting convention); recall of in-pair targets; the miss table of 9.2.
+13. **Memory:** `predict_maps` keeps every map in a dictionary. Validation would hold 844 × 12 × 177 × 106 float32 = 760 MB. Turn each batch into points directly.
+14. **Final training and test are different now.** The first plan trained on 2004–2016 and used the 2017–2019 test a second time. With the split of 8.8: development on `train` → `val` (comparable with 6.13–6.15), then `train,train2,train3` → `val`, then final models on all four blocks and **one** evaluation on 2024–2025, together with a `cnn3d_final` retrained on the same data and the baseline. This is the first use of that test split; all decoding choices are fixed before it.
+
+Unchanged from the first plan: `dataset.sample(..., time_bins=K)` with 0 = current behaviour; `--arch cnn3d_st --time-bins 12 --sigma-t 1`; `evaluate.match(..., tau_h=None)`; output column `t_h`; focal loss with the same α, β; start bias 0.01 with 0.001 as an ablation; plots as maximum over time with points coloured by hour.
+
+### 9.5 The new data and this concept
+
+| Data | Use with the space–time model |
+|---|---|
+| `ACQTIME` (2020–2025 day files) | the + 10 min offset of every SEVIRI time (9.2). Needed for the time baselines and for the wording of all lags |
+| SGIF rekindle records with alert times (`rekindles.parquet`) | recall and time error for rekindle targets; the second protocol can become local in time (neutral only within τ hours of the record); explains part of the duplicate peaks |
+| 3,418 seen fires of 10–50 ha (train 2,163, val 405, train2 463, train3 387), with start times | second output channel "seen ignition ≥ 10 ha" in (hour, i, j). Positives are 12 times sparser in 3D, so this doubling matters more than in 2D (`model_review.md` §4.2). The ≥ 50 ha channel stays the scored one |
+| train2 + train3 (760 targets, 29 pairs) | more training data, used in step 4 of 9.6 |
+| `PIXEL_VZA` per detection | the terrain-parallax test of `model_review.md` §6.1 no longer needs an assumed viewing angle. Liu et al. (2024, GOFER) correct GOES fire pixels for terrain parallax, which supports testing it |
+| Other product fields (`FRP_UNCERTAINTY`, `BT_MIR`, `BT_TIR`, background statistics, `PIXEL_SIZE`) | not usable as input: they exist only for 2020–2025, and `presence_only` (6.14) showed that even FRP adds about 0.01 AP. Would need a re-download of 2004–2019 |
+| SGIF fire weather, land cover, cause, alert source, first intervention | reporting only, as decided in 8.4 (they exist only where ICNF recorded a fire) |
+| SGIF extinction time | not used; ICNF end times do not match the hotspot activity (2.1) |
+| Quality product / cloud mask | no change to the no-go of 6.20 |
+| MTG FCI (LSA-509, 1 km, 10 min, 2025 only) | outlook: at that resolution the median pair distance of 4.2 km is 3–4 pixels, so most pairs would separate in space |
+
+### 9.6 Revised implementation plan
+
+| File | Change |
+|---|---|
+| `dataset.py` | `sample(..., time_bins=0, sigma_t=1.0)`: with `time_bins=K`, y is `(K, h, w)` and w is `(K, h, w)` (9.4, items 1–2); the 2D y and w are returned as well for the auxiliary head. Start hours from `fires.start_utc − period`. New checks: every target has ≥ 1 positive voxel; maximum of the 3D target over the hours ≤ 2D target; flips keep the hour |
+| `model.py` | `TemporalCNN3DST`: encoder of `TemporalCNN3D` (24 → 12 → 6 steps), global context, decoder with nearest upsampling + Conv3d and skips (→ 12 → 24 steps), cut to the 12 period hours, per-hour head (Conv3d 1×3×3 → 32, 1×1×1 → 1), plus the 2D head; returns `(logits3d, logits2d)`. `focal_loss` works unchanged on 3D tensors |
+| `train.py` | options `--arch cnn3d_st`, `--time-bins`, `--sigma-t`, `--aux2d-weight`; `pos_threshold(σ, σ_t, bin)`; flips (9.4, item 3); `heatmap_to_points_3d` (9.4, items 6–8); `predict` turns each batch into points; points carry `t_h`. Checkpoint choice as now: mean AP @ 5 / 10 km of the D1 points |
+| `evaluate.py` | `match(..., tau_h=None)`, time metrics, in-pair and already-burning groups (9.4, item 12) |
+| `baselines.py` | `t_h` for nucleus births; rule-based time for 2D peaks (9.4, item 11) |
+| `run_ablations.py` | experiments of steps 3–4 |
+| `evaluate_test.py`, plot scripts | accept points with `t_h`; period-level bootstrap of the AP difference (still open from 8.8) |
+
+Steps:
+
+0. Move the checks of 9.2 into `src/spacetime_target_analysis.py` (extends `time_target_analysis.py`), output `outputs/spacetime_target_analysis.txt`.
+1. **No training (about 1–1.5 days).** Targets, weights, decoder, evaluation, time baselines. Tests: decoder recovers synthetic Gaussians to 0.1 px / 0.1 h; `time_bins=0` gives byte-identical samples; `cnn3d_final` on validation still 0.635 / 0.704, baseline 0.448 / 0.577. First result without training: time error of the two rule-based baselines.
+2. **Smoke test, then one run** of `cnn3d_st` (12 × 1 h, 2D head, seed 0, `train` → `val`). Gates: D0 not below `cnn3d_final` by more than the seed spread; D1 not below D2. Then in-pair recall and time error.
+3. **Ablations, 1 seed each, then 3 seeds for the best two:** σ_t 0.5 / 1 / 2 h; architecture (U-Net; no down-sampling in time with dilated convolutions, 72,289 parameters; 6 × 2 h); 2D head off; `day` channel; start bias; nearest voxel set to 1; second channel for seen 10–50 ha fires. Decode-only: score, duplicate rule. ConvLSTM with fixed-lag readout (9.7).
+4. **More data:** best `cnn3d_st` and `cnn3d_final` with `--train-splits train,train2,train3`, 3 seeds, on validation (experiment E2 of 7.7 for both models).
+5. **Final:** both models on `train,val,train2,train3 --no-val` (3,142 targets), 3 seeds; decoding fixed in writing; one test evaluation on 2024–2025 with the baseline.
+
+Cost on the M1 (measured step times: `cnn3d` 300 ms, `cnn3d_st` 630 ms = 2.1×, with or without the 2D head; dilated variant 720 ms; ConvLSTM 2 × 16 180 ms, with fixed-lag readout 210 ms):
+
+| Run | Crops / epoch | Training / epoch | Whole run |
+|---|---|---|---|
+| `cnn3d_st`, `train` (1,979 targets) | 5,937 | about 3.9 min | about 1 h 50 with validation every 2 epochs |
+| `cnn3d_st`, `train,train2,train3` (2,739) | 8,217 | about 5.4 min | about 2 h 20 |
+| `cnn3d_st`, final (3,142), no validation | 9,426 | about 6.2 min | about 2 h 05 |
+| `cnn3d_final`, final (3,142), no validation | 9,426 | about 2.9 min | about 1 h |
+
+Steps 2–3: about 15 runs ≈ 27 h. Step 4: about 10 h. Step 5: about 9 h. In total about 46 h on the M1; the first plan gave 26 h for fewer runs and less data.
+
+### 9.7 Other ideas
+
+**For the 3D CNN.**
+- Train on windows that start at any hour, not only at 06 and 18 UTC. With hourly maps the label of a window is well defined for any start (targets = fires that start in its 12 output hours), so every fire is seen at up to 12 positions in time. It needs the labels selected by start time instead of by period, and an hour-of-day channel. Scoring stays on the fixed periods. Larger change; only if step 3 shows over-fitting to the start-hour distribution.
+- Width of the peak over the hours as a time uncertainty per fire (replaces the Laplace head of 6.19, option 1).
+- Point prediction with one-to-one matching instead of peaks (P2PNet, Song2021 in `literature.md`): removes the 3 × 3 limit that causes most in-pair misses, also for the 20 targets that the 2D target already represents. A larger change than the time axis; candidate if in-pair recall stays low.
+- A second scoring protocol that merges targets ≤ 2 px and ≤ τ hours apart into one event, to report how much of the remaining error is a question of how ICNF splits a fire complex into records.
+
+**For the ConvLSTM (concept only).**
+- A ConvLSTM reads forward in time, so at hour t it cannot know whether a new hotspot becomes a ≥ 50 ha fire. **Fixed-lag readout:** the map of period hour k is read from the hidden state 6 steps later (the head is applied to steps 12–23 of the window). Every hour then has exactly 6 h of later observation, which is also a clear operational statement ("ignition map with 6 h delay"). Cost 1.17× `conv_final`, no new parameters (45,009).
+- For reconstruction, a second ConvLSTM that reads backward, joined with the forward one before the head (about 2× cost). The onset of a fire is then an edge seen from both sides.
+- The readout result of 6.14 (`readout_max` > last state) is consistent with this: the last state is the wrong place to ask about hour 3.
+
+**Related work for the write-up** (checked 2026-11-13 by web search unless marked):
+- Zhu & Beroza 2019, PhaseNet, *Geophys. J. Int.* 216, 261–273: arrival-time picking as a probability curve trained on Gaussian-shaped labels around analyst picks (σ = 0.1 s). The closest analogue of the time axis: an onset with an uncertain human label.
+- Cioppa et al. 2020, context-aware loss for action spotting, CVPR, pp. 13126–13136: a loss that uses the temporal context around an event instead of the single annotated frame. The SoccerNet spotting metric it reports (average mAP over time tolerances) is the model for "AP with a time tolerance"; the definition of the tolerances is from memory and must be checked in Giancola et al. 2018.
+- Li et al. 2020, "Actions as moving points" (MOC), ECCV: actions detected as centre points over several frames, in the CenterNet line.
+- Lin et al. 2018, BSN, ECCV: per-step start probabilities for action boundaries.
+- Liu et al. 2024, GOFER, *Earth Syst. Sci. Data* 16, 1395–1424: hourly fire progression from GOES for 28 large Californian fires, with terrain-parallax correction; rule-based, no ignition labels.
+- Not verified today, cite only after checking: Bodla et al. 2017 (Soft-NMS, ICCV) for score-decaying duplicate suppression; Odena et al. 2016 (*Distill*) for the artefacts of transposed convolutions; a 2025 preprint (arXiv 2511.06731, seen only as a search summary) reporting that point-wise losses on Gaussian labels lower the peak height in phase picking, the same effect as the score dilution in 9.2.
+- A new search found no study that learns ignition time and place from geostationary fire products; the gap of `literature.md` §4.2 still holds.
+
+### 9.8 Open questions
+
+1. Split (8.7): this plan assumes the default of 8.8. A change before step 4 costs nothing; after step 5 the test is used.
+2. Is the hour of the ICNF alert the right time label for the reconstruction use case, or the first detectable hour? They differ by two or more hours for 22 % of the fresh targets. The plan keeps the ICNF time, because it is the recorded ground truth.
+3. Whether the 10–50 ha channel goes into the main model or stays an ablation.
+
+### 9.9 Step 1 implemented: targets, decoder, evaluation, time baselines (2026-11-14)
+
+No training. Checks and results: `src/spacetime_checks.py` → `outputs/spacetime_checks.txt` (test split never used).
+
+**Code.**
+- `src/dataset.py`: `sample(..., time_bins=K, sigma_t=SIGMA_T)`; with K > 0 it returns `x, (y3, y2), (w3, w2), lab`. y3 `(K, h, w)` = max over targets of the spatial Gaussian × a Gaussian in time at the ICNF start (hours since the period start, value at the bin centre). w3 = ignore discs over all bins; the "targets win" core is restored only in bins within 2 σ_t of the target's start (9.4, item 2). y2, w2 = the 2D sample. With `time_bins=0` the sample is byte-identical to before (hash over 300 periods × 3 sample variants).
+- `src/train.py`: `pos_threshold(σ, σ_t, bin_h)` (0.667 for 1 px / 1 h / 1 h bins; 2D values unchanged); `flip()` / `to_tensor()` for the crops, which mirror only the last two (spatial) axes and accept the tuples of space-time samples; `heatmap_to_points_3d` (decoding D1: peaks over `window_t` bins × 3 × 3, 3 × 3 centroid inside the peak's bin, time from `peak_time` = log-parabola over three bins, scores `peak` / `noisy_or` / `x2d`); `decode()` for D1 (`3d`), D2 (`max`) and D0 (`2d`, needs the auxiliary map); `maps_to_points` adds `t_h` for space-time maps. 2D maps are decoded exactly as before. The model, the loss on 3D tensors and `predict_maps` are step 2.
+- `src/evaluate.py`: `match` / `evaluate(..., tau_h=None)`: with `tau_h` a hit also needs |Δt| ≤ τ; predictions with `t_h` get `dt_h` and the time metrics (median |Δt|, median Δt, share ≤ 1 h / 2 h, overall and per subgroup). New subgroups `in_pair` and `already_burning` from `target_context()` (definitions of 9.2). The default protocol is unchanged.
+- `src/baselines.py`: nucleus predictions carry `t_h` = birth + `ACQ_OFFSET_H` − period start; `first_detection_times()` (first detection ≤ 1.5 cells from a predicted point in [period − 1 h, period + 18 h) + offset, clipped to [0, 12] h); `training_lag_h()`.
+- `src/tiling_design.py`: `ACQ_OFFSET_H = 10 / 60` (9.2).
+
+**Checks** (all pass):
+
+| Check | Result |
+|---|---|
+| Positive voxels, 3,142 non-test targets (1,396 periods) | every target ≥ 1 (mean 3.03), all with weight > 0 |
+| max over bins of y3 ≤ y2; w3 ≤ w2; 2D part = `time_bins=0` | 0 / 0 / 0 violations |
+| Flips, 200 training crops, both axes | hour, value, weight and input at the target unchanged in all |
+| Decoder, 2,000 synthetic Gaussians (t in [1, 11) h) | time error ≤ 7 × 10⁻⁸ h; position identical to the 2D decoder in the same bin |
+| D1 on the validation target tensors | own peak (≤ 0.5 cells) for 97.8 % of 403 targets, time error median 0.000 h, ≤ 0.25 h for 94.4 %. The non-zero errors come from overlapping targets and from the first and last bin (no parabola there) |
+| D2 on the same tensors | own peak for 95.5 %; time up to 8.4 h wrong where two targets share a cell (the hour of the other fire), the case D1 is for |
+| Baseline / `cnn3d_final_s0-2` on validation | 0.448 / 0.577 and 0.635 ± 0.008 / 0.704 ± 0.001, equal to the stored values; `baselines_log.txt` and `dataset_check_log.txt` byte-identical after re-running |
+
+**First result: how well rule-based times hit the ICNF start** (validation 2015–2016, hits @ 10 km; lag of the training targets: +0.38 h, first detection + 10 min − ICNF start):
+
+| Method | Hits with a time | Median \|Δt\| | Median Δt | ≤ 1 h | ≤ 2 h | AP @ 10 km, τ = 1 / 2 / 3 h (no τ) |
+|---|---|---|---|---|---|---|
+| nucleus birth | recall 0.80 | 0.50 h | +0.30 h | 68 % | 83 % | 0.33 / 0.45 / 0.50 (0.577) |
+| nucleus birth, lag removed | | 0.40 h | −0.08 h | 72 % | 85 % | 0.36 / 0.45 / 0.50 |
+| `cnn3d_final` + first detection | recall 0.90 | 0.57 h | +0.26 h | 63 % | 77 % | 0.41 / 0.52 / 0.59 (0.704) |
+| `cnn3d_final` + first detection, lag removed | | 0.42 h | −0.12 h | 66 % | 79 % | 0.44 / 0.53 / 0.59 |
+
+Median |Δt| of the hits by subgroup (@ 10 km), nucleus birth / `cnn3d_final` + first detection, both lag removed: isolated 0.25 / 0.25 h; with neighbours 0.47 / 0.59 h; in a close pair 0.70 / 1.89 h; already burning 1.58 / 2.30 h; rekindle 1.17 / 1.61 h.
+
+- **The bar for step 2:** a learned time has to beat about 0.4 h median |Δt| and 66–72 % within 1 h, and above all the 1.9–2.3 h of the pairs and the already-burning places, where the first-detection rule fails by construction (it returns the time of the fire that was already there).
+- With a 1 h tolerance the 2D model + rule loses 0.27 AP @ 10 km (0.704 → 0.44): most of that is the timing of fires in active areas, not the location. AP with τ = 2 h is the more realistic comparison given the label spread (9.2).
+- Removing the training lag helps the median but not the tails. The nucleus baseline looks better per hit than the model + rule because it only times the fires it finds (recall 0.80), which are mostly the easy ones.
+- Seed 2 of `cnn3d_final` gives 6,000 points (seeds 0–1: about 4,100); 22 % of them have no detection within 1.5 cells (low-score peaks). Hits are not affected.
+
+Next: step 2 (model `cnn3d_st` with the 2D head, 3D loss, streaming `predict`, smoke test and one run).
+
+### 9.10 Step 2: model `cnn3d_st` and smoke test (2026-11-14)
+
+The first training run is started by hand (below); nothing was trained here except smoke runs in the git-ignored `models/ablations_smoke/`.
+
+**Code.**
+- `src/model.py`: `TemporalCNN3DST` (`--arch cnn3d_st`): encoder of `TemporalCNN3D` (24 → 12 → 6 steps), decoder with nearest upsampling + Conv3d and skips (→ 12 → 24), global context (max and mean of the encoder output) copied to every hour, cut to the 12 period hours, per-hour head (Conv3d 1×3×3 → 32, 1×1×1 → 1), plus the 2D head of `TemporalCNN3D` on the global context. 162,258 parameters (143,761 without the 2D head). `build_model` checks that `time_bins` equals the number of model steps in the period (12 for hourly steps).
+- `src/train.py`: options `--time-bins`, `--sigma-t`, `--aux2d-weight` (0 = no 2D head); `--time-bins` only together with `--arch cnn3d_st`. Loss = focal loss on (y3, w3) with `pos_threshold(σ, σ_t, bin)` + `aux2d_weight` × focal loss on (y2, w2). `iter_maps` / `predict` make the points batch by batch; `predict(..., decodes=("3d", "max", "2d"))` gives the three decodings from one pass; `predict_maps` stays for the scripts that need maps. Validation of `cnn3d_st` records, besides AP / recall / F1 / error of D1 (the checkpoint criterion, as before): recall of in-pair and already-burning targets, median |Δt| and share ≤ 1 h of the hits, AP @ 5 / 10 km with τ = 2 h, and AP of D2 (`AP@k_max`) and D0 (`AP@k_2d`).
+- `src/run_ablations.py`: experiment `cnn3d_st` (tier 6): `--arch cnn3d_st --time-bins 12 --sigma-t 1 --neg-ratio 2`, otherwise the settings of `cnn3d_final`.
+
+**A bug found by the smoke test: MPS gives wrong outputs for large `cnn3d_st` batches.** With 16 full-grid periods per model call (largest activation 16 × 48 × 24 × 177 × 106 = 3.5 × 10⁸ values) the MPS logits differ from the CPU by up to 4.4 (2D head almost constant), without an error; with ≤ 8 periods per call they agree to 2 × 10⁻⁶. `cnn3d_final` is correct at 16 (3 × 10⁻⁶). `iter_maps` now splits `cnn3d_st` calls on MPS into 8 periods; the results do not depend on the split. Training crops (16 × 32 × 32) are far below the size where this happens. On CUDA (Colab) the split is not applied; check a few periods against the CPU before trusting a Colab validation.
+
+**Smoke tests** (all pass):
+
+| Test | Result |
+|---|---|
+| `run_ablations.py --only cnn3d_st --smoke` (1 epoch, 3 batches, 10 validation periods) | runs; 5,937 crops per epoch (1,979 positive), as `cnn3d_final` |
+| `--aux2d-weight 0 --no-val --train-splits train,train2,train3` | runs, last epoch saved |
+| `--arch cnn3d --time-bins 12` | refused |
+| Short run, 2 × 120 batches, scored on 150 validation periods (cnn3d with the same budget: AP @ 10 km 0.577, recall 0.89) | D1 0.583 (recall 0.95, median \|Δt\| 1.2 h), D2 0.617, D0 0.604. Training learns; the numbers say nothing about the full run |
+| Streamed points = points from all maps at once | identical |
+| `ablations_georef/cnn3d_final_s0` through the new `predict` | AP 0.6442 / 0.7054, equal to the stored values |
+
+Measured speed on the M1: 1.29 min per 120 training batches → about 4.0 min per epoch (371 batches); one full validation (844 periods, three decodings) about 3.1 min. One run of 20 epochs with validation every 2 epochs ≈ 1 h 50.
+
+**Run** (step 2 of 9.6: seed 0 first; the same command with `--seeds 0 1 2` for the three seeds of step 3):
+
+```
+caffeinate -i .venv/bin/python -u src/run_ablations.py --only cnn3d_st --seeds 0 --folder ablations_st 2>&1 | tee outputs/ablations_st_progress.txt
+```
+
+Compare with `ablations_georef/cnn3d_final_s0-2` (0.635 / 0.704). Gates of 9.6, step 2: D0 (`AP@k_2d`) not below `cnn3d_final` by more than the seed spread (±0.008 / ±0.001); D1 (`AP@k`) not below D2 (`AP@k_max`). Then in-pair recall (`recall_in_pair@k` covers all 52 in-pair validation targets; `cnn3d_final` there: 0.44 @ 10 km, 0.36 @ 5 km, from the table of 9.2, whose 0.32 is only the 30 with an own 2D peak) and the time error against the bar of 9.9 (median |Δt| ≈ 0.4 h; pairs 1.9 h, already burning 2.3 h for the 2D model + first-detection rule).
+
+Still open from the plan: `evaluate_test.py` and the plot scripts do not yet report the time or draw space-time maps (they run, scoring D1); period-level bootstrap.
+
+### 9.11 Step 2 result: `cnn3d_st`, seed 0 (2026-11-14)
+
+Run `ablations_st/cnn3d_st_s0` (111 min on the M1). Best checkpoint at epoch 10 (selection on the mean of D1 AP@5 and AP@10, as for every run); epoch 20 ended at 0.631 / 0.729. Evaluation of the checkpoint: `src/spacetime_eval.py` → `outputs/spacetime_eval_s0.txt` (reproduces the stored validation scores exactly). Validation 2015–2016 only; one seed.
+
+**Place (AP @ 5 / 10 km).** `cnn3d_final`: 0.635 ± 0.008 / 0.704 ± 0.001 (best checkpoints, 3 seeds); at epoch 10 0.617 / 0.694.
+
+| Decoding | AP | Recall (all preds) | Recall in pair (52) | Recall already burning (94) | Points |
+|---|---|---|---|---|---|
+| D1 3D peaks | **0.646 / 0.731** | 0.881 / 0.950 | 0.54 / 0.65 | 0.69 / 0.84 | 7,350 |
+| D2 max over hours | 0.634 / 0.718 | 0.844 / 0.908 | 0.42 / 0.50 | 0.56 / 0.68 | 4,993 |
+| D0 auxiliary 2D head | 0.605 / 0.689 | 0.846 / 0.908 | 0.38 / 0.46 | 0.62 / 0.71 | 42,200 |
+| `cnn3d_final` (9.2) | 0.635 / 0.704 | 0.84 / 0.90 | 0.36 / 0.44 | 0.60 / 0.70 | |
+
+- **The gain is real on this seed and split in two parts:** D2 (the same 2D peak decoding of the max over hours) is −0.001 / +0.014 against `cnn3d_final`, so training on the space-time target alone helps the map a little; the 3D decoding adds +0.012 / +0.013 on top. Together +0.011 / +0.027, at or above the top of the 9.3 estimate (AP +0.00 to +0.02).
+- **Where:** the extra recall is where 9.3 expected it. In-pair recall @ 10 km 0.44 → 0.65 (about 11 of 52 targets), already burning 0.70 → 0.84 (about 13 of 94); isolated and fresh targets stay at 0.98–1.00. D1 gives about 1.5 × as many points as D2 and these extra peaks are mostly true positives (AP rises, not only recall).
+- **Gate 1 (D0 not below `cnn3d_final`) fails formally** (−0.030 / −0.015, more than the seed spread). It was meant to show that the shared trunk is not harmed; D2 shows that directly (≥ `cnn3d_final`), so the auxiliary head is the weak part, not the trunk. Not a reason to stop; D0 is not the output that would be used. **Gate 2 (D1 ≥ D2) passes** at every validation.
+
+**Time (true positives of D1 @ 10 km).** Model time against the first-detection rule applied to the *same* D1 points (lag of +0.38 h removed):
+
+| | median \|Δt\| | ≤ 1 h | ≤ 2 h | AP τ = 1 / 2 / 3 h | in pair | already burning | rekindle | isolated | fresh |
+|---|---|---|---|---|---|---|---|---|---|
+| model (D1) | 0.60 h | 65 % | 81 % | 0.454 / 0.595 / 0.651 | **1.04 h** | **1.35 h** | **1.27 h** | 0.37 h | 0.48 h |
+| rule, lag removed | 0.47 h | 66 % | 79 % | 0.460 / 0.561 / 0.620 | 1.56 h | 2.28 h | 1.62 h | **0.25 h** | **0.36 h** |
+
+- The model's own time is slightly worse in the median (its bias is small, median Δt +0.09 h) but better in the tails (≤ 2 h, AP τ ≥ 2 h). It is clearly better where the rule is blind, close pairs and already-burning places (−0.5 h and −0.9 h median), and worse on isolated, fresh fires, where the first detection is a strong, direct cue that 1 h bins and σ_t = 1 h smooth away.
+- So the two times are complementary. A cheap combination to test next: the rule time for points whose place has no detection in the 6 h before (fresh), the model time otherwise.
+
+**Next.** Seeds 1 and 2 (`--seeds 1 2`, about 3 h 40) before any claim: the AP gain over `cnn3d_final` (+0.011 / +0.027) is one seed against a seed spread of about 0.01–0.02 at a given epoch. Then the time combination above, and the open items of 9.10 (`evaluate_test.py`, plots, period bootstrap).
+
+### 9.12 Example periods (2026-11-16)
+
+`src/plot_spacetime_examples.py` → `figures/spacetime/val_examples_{1,2}.png`, `outputs/spacetime/val_examples.csv`. Validation only (both models trained on 2004–2014; test stays locked), cases by fixed rules with seed 0, each model at its best-F1 threshold at 10 km (`cnn3d_final_s0` p ≥ 0.45, `cnn3d_st_s0` D1 p ≥ 0.46). Column (d) shows the hourly probability at each labelled target with the ICNF start, the model time and the rule time.
+
+- **Close pair** (2016-08-10 06 UTC): three targets ≤ 2 cells apart, starting 5.3, 7.5 and 8.9 h. `cnn3d_final` gives one point; `cnn3d_st` gives two peaks at 4.2 h and 8.4 h, hits two of them (Δt −1.1 h, +0.9 h). The third (1.4 h after the second) stays merged, as 9.2 expects for pairs < ~1.5 h apart.
+- **Already burning** (2016-08-11 18 UTC): hit by both; the model time is early (−2.8 h, rule −3.0 h). Its hourly curve peaks when the surrounding area lit up, not at the new start: no gain in time here.
+- **Outbreak** (2016-08-07 06 UTC, 31 targets): 20 hits vs 18, false alarms 3 vs 2. The labelled targets in (d) are the in-pair / already-burning ones (chosen first), so mostly misses; where one is found the model time beats the rule (−1.3 h vs −5.5 h).
+- **Fresh, isolated** (2015-10-01): model +0.6 h, rule +0.2 h, the typical case where the rule is better (9.11).
+- **Missed / random** (2015-07-23 18, 2015-04-02, 2015-03-25): weak or late signals (p 0.05–0.35) missed by both models; in 2015-04-02 the hourly curve peaks at the right time (7.5–8.5 h vs 7.0 h) but stays below the threshold.
+- **False alarm** (2015-04-03): one point near an ignore fire (neutral) and one false alarm on a hotspot cluster on the northern border.

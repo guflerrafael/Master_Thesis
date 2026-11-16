@@ -235,6 +235,9 @@ Figure: `figures/pipeline/sample_labels.png` (2016-08-06 06 UTC: 3 targets, 10 i
 - `rekindle_ignore=True` (`--rekindle-ignore`, experiment `cnn3d_final_rk`): ignore regions at all rekindle records.
 - `sigma`, `ignore_r` as above.
 
+### 6.7 Space-time targets (option, not yet used by a trained model; notes §9)
+`sample(..., time_bins=K, sigma_t=1.0)` returns `(y3, y2)` and `(w3, w2)`: y3 `(K, h, w)` = spatial Gaussian × Gaussian in time (σ_t hours) at the ICNF start, value at the bin centres of [0, 12) h; w3 = ignore discs in all bins, target core restored only in bins within 2 σ_t of the target's start; y2, w2 = §6.4–6.5. Positive voxels: `pos_threshold(σ, σ_t, bin_h)` = 0.667 for 1 px / 1 h / 1 h. Flips mirror only the spatial axes (`train.flip`).
+
 ## 7. Input tensors
 
 ### 7.1 `FireData.sample(period, crop=None)` → `x, y, w, lab`
@@ -291,6 +294,8 @@ AdamW (lr 1e-3, weight decay 1e-4), `CosineAnnealingLR(T_max = epochs)`, 20 epoc
 5. Frame: `sensor_to_true_ij(fi, fj, period)` (+0.5 px S and E before 2017-12-01), then `ij_to_latlon`.
 6. Output: `DataFrame(period, lat, lon, score = peak probability)`.
 
+Space-time maps (notes §9.4, §9.9): `train.decode` with `decode="3d"` (peaks over 3 bins × 3 × 3 cells, centroid in the peak's bin, time by a log-parabola over three bins), `"max"` (maximum over bins, then the 2D decoder) or `"2d"` (auxiliary 2D map); points get `t_h` (hours since the period start).
+
 Peak ablation (notes §6.9): threshold 0.02–0.1 no effect; sub-pixel +0.027 AP@5; 5 × 5 window worse. Log-parabola decoding and seed ensembles: `model_review.md` §3.1 (not yet in `src/`).
 
 ## 10. Evaluation (`src/evaluate.py`)
@@ -315,6 +320,8 @@ Peak ablation (notes §6.9): threshold 0.02–0.1 no effect; sub-pixel +0.027 AP
 What the metrics condition on: only seen targets are in the denominator (unseen ≥ 50 ha are ignore); predictions at fires < 10 ha, ongoing fires and unrecorded fires are FP (in the second protocol not those next to a rekindle record); predictions at 10–50 ha / unseen / boundary fires are neutral.
 
 Validation 2015–2016, `ablations_georef/cnn3d_final_s0-2` on this build: AP 0.635 / 0.704 @ 5 / 10 km (as stored in the checkpoints); second protocol 0.650 / 0.737.
+
+Space-time protocol (notes §9.9): predictions with `t_h` get the time error of their hits (`dt_h`, median |Δt|, ≤ 1 h, ≤ 2 h, per subgroup); `evaluate(..., tau_h=τ)` also requires |Δt| ≤ τ for a hit. Extra subgroups `in_pair` (another target ≤ 2 cells, same period) and `already_burning` (detection ≤ 1.5 cells in [start − 6 h, start − 30 min]) from `evaluate.target_context`. Time baselines (`baselines.py`): nucleus birth time + `ACQ_OFFSET_H` (10 min; the SEVIRI time label is the slot start, Portugal is scanned ~10 min later), and `first_detection_times` for the points of a 2D model.
 
 `src/evaluate_test.py`: several checkpoint folders in one run (`--folders`), output folder `--out` (never `final`, which holds notes §6.17), AP per year and with rekindles neutral, recall by all subgroups; the test split only with `--confirm-test`.
 

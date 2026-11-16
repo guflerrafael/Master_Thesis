@@ -43,6 +43,8 @@ SPLIT = {"train": range(2004, 2015), "val": range(2015, 2017), "train2": range(2
 LABEL_PERIOD = ("2004-01-20", "2025-12-30")   # fires (and periods) fully inside SEVIRI and ICNF
 PERSISTENT_END = "2020-01-01"                 # persistent pixels from 2004-2019 only (notes.md 7.4-7.5)
 SEVIRI_FILE = "seviri_frp_2004_2025.parquet"  # src/clean_data.py
+ACQ_OFFSET_H = 10 / 60                        # SEVIRI time label = slot start; Portugal is scanned ~10 min later
+                                              # (ACQTIME of the 2020-2025 product: +10 min, +11 north of ~42 N; notes.md 9.2)
 
 def load():
     sev = pd.read_parquet(PROC / SEVIRI_FILE).sort_values("time_utc").reset_index(drop=True)
