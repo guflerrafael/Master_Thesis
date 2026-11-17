@@ -59,6 +59,8 @@ Run from the repository root, in this order:
 26. `.venv/bin/python src/plot_spacetime_examples.py`: example periods of `cnn3d_st` next to `cnn3d_final`, validation only (9.12)
 27. `.venv/bin/python -u src/weather_cloud_checks.py | tee outputs/weather_cloud/checks.txt`: fire weather / wind and cloud cover against the errors of `cnn3d_st`, validation only, needs the Quality files of 6.20 (9.13)
 28. All training years up to 2023, Mac + Colab in parallel (9.14): Mac `src/run_ablations.py --only cnn3d_st_all --seeds 0 --folder ablations_all`, Colab `colab/runs_colab.ipynb` with the other seeds, then `src/sync_runs.py --src <unzipped Drive folder> --folder ablations_all`; final models with `--final --folder final_2023`
+29. `for s in 0 1 2; do .venv/bin/python src/spacetime_eval.py ablations_all/cnn3d_st_all_s$s > outputs/spacetime_eval_all_s$s.txt; done`: validation of the all-years runs by decoding, subgroup and time error (9.15)
+30. `.venv/bin/python src/compare_runs.py > outputs/compare_runs.txt`: re-scores every finished run of the 2004–2014 / all-years configurations on validation, differences with a period bootstrap (9.16)
 
 Since 2026-11-13 steps 1, 7, 9 and 10 use 2004–2025 (8.8); `src/clean_data.py` reads the ICNF SGIF export (`data/raw/icnf/`), which is not versioned.
 
@@ -1917,7 +1919,7 @@ Run `ablations_st/cnn3d_st_s0` (111 min on the M1). Best checkpoint at epoch 10 
 
 ### 9.14 Training on all years up to 2023, on the Mac and Colab in parallel (2026-11-17)
 
-Code only; nothing trained yet.
+Code and setup; the results of the first runs are in 9.15.
 
 **Two ways to use the new years** (both never touch the test years 2024–2025):
 
@@ -1947,3 +1949,70 @@ caffeinate -i .venv/bin/python -u src/run_ablations.py --only cnn3d_st_all --see
 ```
 
 Colab: `colab/runs_colab.ipynb` with `EXPERIMENTS = ["cnn3d_st_all"]`, `SEEDS = [1, 2]`, `FOLDER = "ablations_all"`, after committing and pushing. Merge: download `MyDrive/ablations_all_runs.zip`, unzip, then `.venv/bin/python src/sync_runs.py --src ~/Downloads/master_thesis_runs --folder ablations_all`. Compare with `ablations_st/cnn3d_st_s0` (and seeds 1, 2 on 2004–2014 if run) and `ablations_georef/cnn3d_final_s0-2`.
+
+### 9.15 Result: `cnn3d_st` trained on all years up to 2023, seeds 0–2 (2026-11-17)
+
+Runs `ablations_all/cnn3d_st_all_s{0,1,2}` (train + train2 + train3 = 2004–2014, 2017–2023; 9.14). Seed 0 on the M1 (MPS, 144 min), seeds 1 and 2 on Colab (CUDA, 37 min each for training and validation), merged with `sync_runs.py`. Device check after epoch 1: max |Δp| 7e-7 (MPS), 5e-7 / 6e-7 (CUDA). Evaluation: `src/spacetime_eval.py ablations_all/cnn3d_st_all_s<seed>` → `outputs/spacetime_eval_all_s{0,1,2}.txt`. Validation 2015–2016 only; the test years are untouched.
+
+**Place (AP @ 5 / 10 km, best checkpoints).** Best epochs 16, 20, 14 (seed 0 of 9.11: epoch 10), so with 38 % more crops the model keeps improving longer.
+
+| | D1 3D peaks | D2 max over hours | D0 2D head | Recall in pair @ 10 (52) | Already burning @ 10 (94) |
+|---|---|---|---|---|---|
+| `cnn3d_st_all`, mean of 3 seeds | **0.663 / 0.740** (0.661–0.665 / 0.740–0.740) | 0.653 / 0.731 | 0.633 / 0.714 | **0.74** (0.73–0.75) | **0.86** (0.84–0.88) |
+| `cnn3d_st`, 2004–2014, seed 0 (9.11) | 0.646 / 0.731 | 0.634 / 0.718 | 0.605 / 0.689 | 0.65 | 0.84 |
+| `cnn3d_final`, 2004–2014, 3 seeds | 0.635 / 0.704 | | | 0.44 | 0.70 |
+
+Late epochs 16–20 (less dependent on the checkpoint choice), mean of the epochs: `cnn3d_st_all` 0.655 / 0.740 (seed range at each epoch 0.638–0.665 / 0.736–0.743), `cnn3d_st` seed 0 0.632 / 0.728, `cnn3d_final` 0.623 / 0.699.
+
+- **More years help, mostly at 10 km:** +0.017 / +0.009 over `cnn3d_st` seed 0 at the best checkpoint, +0.023 / +0.012 over the late epochs. At 10 km every all-years seed lies above the 2004–2014 run at every epoch from 12 on; at 5 km the lowest all-years seed (s2 late, 0.640) is about level with it. The 2004–2014 configuration has one seed only, so the size of the data effect has an uncertainty of about the `cnn3d_final` seed spread (±0.008 at 5 km). **With a period bootstrap (9.16) the data effect is not established:** +0.017 [−0.003, +0.041] / +0.009 [−0.005, +0.024]. The combined gain over `cnn3d_final` is: +0.028 [+0.007, +0.050] / +0.036 [+0.019, +0.054].
+- **The three all-years seeds agree closely** (AP@10 0.740 for all three; AP@5 within 0.004), across two kinds of hardware. No visible MPS vs. CUDA effect.
+- **Against `cnn3d_final`:** +0.028 / +0.036 in total. Training on 2020–2023 (LSA SAF download, a different source from the 2004–2019 extract) does not hurt validation on the 2015–2016 extract: first evidence for 7.7 E2 that the two sources can be mixed.
+- **Gate 1 now passes** (D0 −0.002 / +0.010 against `cnn3d_final`; it failed with −0.030 / −0.015 in 9.11). **Gate 2 passes on two of three seeds** (D1 − D2: −0.003 / 0.000, +0.019 / +0.014, +0.013 / +0.013). D1 keeps its advantage where it matters: in-pair recall @ 10 km 0.74 against 0.53 for D2, already burning 0.86 against 0.75.
+- D1 gives fewer and cleaner points: 5,000–6,300 against 7,350, and 0.4–1.3 % of them have no detection within 1.5 cells (9.11: 5.4 %).
+
+**Time (true positives of D1 @ 10 km; median of the three seeds, each seed in brackets).** No change from more data.
+
+| | median \|Δt\| | ≤ 1 h | ≤ 2 h | AP τ = 2 h | in pair | already burning | rekindle | isolated |
+|---|---|---|---|---|---|---|---|---|
+| model D1, all years | 0.63 h (0.62–0.63) | 64 % | 81 % | 0.593 | 1.18 h (1.08–1.75) | 1.41 h | 1.26 h | 0.37 h |
+| rule, lag removed | 0.47 h | 65 % | 78 % | 0.561 | 1.88 h | 2.32 h | 1.60 h | 0.25 h |
+| model D1, 2004–2014 s0 (9.11) | 0.60 h | 65 % | 81 % | 0.595 | 1.04 h | 1.35 h | 1.27 h | 0.37 h |
+
+- The time quality is the same as in 9.11: same median error, same AP τ = 2 h, the same pattern (model clearly better for pairs, already-burning places and rekindles, the rule better for fresh, isolated fires). The in-pair median is higher, but over more hits (0.74 vs 0.65 recall): the extra pairs that are now found are harder to time.
+- So the time error is limited by the target design (1 h bins, σ_t = 1 h, 9.11) and by cloud (9.13), not by the amount of data. The rule/model combination of 9.11 (rule time for fresh points, model time otherwise) is the remaining cheap gain.
+
+**Consequences.**
+1. Use all non-test years for the final `cnn3d_st` (7.7 E3, `--final --folder final_2023`; that also adds 2015–2016).
+2. For a fair test comparison (E4) the `cnn3d_final` baseline must be trained the same way. `cnn3d_final_all` (3 seeds, about 1 h 15 each on the Mac, about 20 min each on Colab) would also measure the data effect on the 2D model with 3 seeds against 3 seeds, which is cleaner than adding seeds 1 and 2 of `cnn3d_st` on 2004–2014.
+3. Before the test: support for `cnn3d_st` in `evaluate_test.py` (D1 and the time error), and the rule/model time combination fixed on validation.
+
+### 9.16 Does more data help the 2D model too? `cnn3d_final_all` and a run comparison (2026-11-17)
+
+9.15 measures the data effect for `cnn3d_st` against a single 2004–2014 seed. `cnn3d_final_all` (`run_ablations.py`, tier 7: `--arch cnn3d --neg-ratio 2 --train-splits train,train2,train3`) repeats it for the 2D model with 3 seeds on each side. It also gives the all-years 2D baseline needed for a fair test comparison (7.7 E3/E4).
+
+**Reference is valid.** The 2004–2014 runs `ablations_georef/cnn3d_final_s{0,1,2}` (2026-10-24) were trained before the data were extended to 2025, but the 2004–2019 data are identical after the rebuild (`outputs/new_years_check.txt` §5: detections, static maps, fires, labels, period counts). Their configuration equals `cnn3d_final_all` except for the training years and options added since then, which have neutral defaults (`rekindle_ignore` off, `time_bins` 0).
+
+**`src/compare_runs.py`** → `outputs/compare_runs.txt`. It re-scores every finished checkpoint of a configuration with the current evaluation; predictions are cached in `outputs/compare_runs/` and refreshed when a checkpoint is newer. It reports per run and per configuration (mean, range over seeds), and for each difference A − B the difference of the seed means with a 95 % period bootstrap. The bootstrap resamples all 1,462 validation periods 2,000 times, the same resample for every run, so it covers the choice of periods, not the seeds. The bootstrap AP with unit weights reproduces `evaluate` exactly (asserted). The re-scored APs equal the stored validation scores of every run, so the evaluation has not changed since the 2004–2014 runs.
+
+| Difference (AP @ 5 / 10 km) | Seeds | Δ AP@5 [95 %] | Δ AP@10 [95 %] |
+|---|---|---|---|
+| `cnn3d_st` all years − 2004–2014 | 3 vs 1 | +0.017 [−0.003, +0.041] | +0.009 [−0.005, +0.024] |
+| `cnn3d_st` − `cnn3d_final`, 2004–2014 | 1 vs 3 | +0.011 [−0.013, +0.032] | +0.027 [+0.007, +0.045] |
+| `cnn3d_st` all years − `cnn3d_final` 2004–2014 | 3 vs 3 | +0.028 [+0.007, +0.050] | +0.036 [+0.019, +0.054] |
+| `cnn3d_final` all years − 2004–2014 | 3 vs 3 | pending | pending |
+| `cnn3d_st` − `cnn3d_final`, all years | 3 vs 3 | pending | pending |
+
+So far: the combined improvement is clear at both radii. The architecture effect is clear at 10 km. The data effect points the same way on every seed but is within the period noise. The two pending rows split the combined gain cleanly into data and architecture with 3 seeds each.
+
+**Commands.** Colab, `colab/runs_colab.ipynb` (now preset: `EXPERIMENTS = ["cnn3d_final_all"]`, `SEEDS = [0, 1, 2]`, `FOLDER = "ablations_all"`; about 20 min per seed on a T4). This needs the changes pushed. Alternatively, on the Mac (about 1 h 15 per seed), give the Mac and Colab different seeds:
+
+```
+caffeinate -i .venv/bin/python -u src/run_ablations.py --only cnn3d_final_all --seeds 0 1 2 --folder ablations_all 2>&1 | tee -a outputs/ablations_all_progress.txt
+```
+
+Then download and unzip `MyDrive/ablations_all_runs.zip`, merge, and compare:
+
+```
+.venv/bin/python src/sync_runs.py --src ~/Downloads/master_thesis_runs --folder ablations_all
+.venv/bin/python src/compare_runs.py > outputs/compare_runs.txt
+```

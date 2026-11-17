@@ -25,3 +25,4 @@ figures/ablations_smoke/
 models/final_smoke/
 outputs/final_smoke/
 figures/final_smoke/
+outputs/compare_runs/

@@ -1,0 +1,27 @@
+final_0414: 3 finished runs (ablations_georef/cnn3d_final_s*)
+final_all: 0 finished runs (ablations_all/cnn3d_final_all_s*)
+st_0414: 1 finished runs (ablations_st/cnn3d_st_s*)
+st_all: 3 finished runs (ablations_all/cnn3d_st_all_s*)
+
+Per run (validation 2015-2016, current evaluation; late = mean of the validated epochs 16-20 in the history):
+                            best epoch  late AP@5  late AP@10   AP@5  recall@5  AP@10  recall@10  in pair@10  already burning@10
+config     run                                                                                                                  
+final_0414 cnn3d_final_s0           12      0.634       0.704  0.644     0.844  0.705      0.906       0.442               0.723
+           cnn3d_final_s1           10      0.624       0.693  0.630     0.836  0.704      0.896       0.462               0.691
+           cnn3d_final_s2           14      0.611       0.699  0.630     0.839  0.703      0.891       0.423               0.681
+st_0414    cnn3d_st_s0              10      0.632       0.728  0.646     0.881  0.731      0.950       0.654               0.840
+st_all     cnn3d_st_all_s0          16      0.661       0.741  0.663     0.881  0.740      0.953       0.731               0.840
+           cnn3d_st_all_s1          20      0.663       0.741  0.665     0.913  0.740      0.963       0.750               0.883
+           cnn3d_st_all_s2          14      0.640       0.739  0.661     0.888  0.740      0.950       0.731               0.862
+
+Per configuration (mean, min, max over seeds):
+  final_0414 (3 seeds): late AP@5 0.623 [0.611-0.634]; late AP@10 0.699 [0.693-0.704]; AP@5 0.635 [0.630-0.644]; recall@5 0.840 [0.836-0.844]; AP@10 0.704 [0.703-0.705]; recall@10 0.897 [0.891-0.906]; in pair@10 0.442 [0.423-0.462]; already burning@10 0.699 [0.681-0.723]
+  st_0414 (1 seeds): late AP@5 0.632 [0.632-0.632]; late AP@10 0.728 [0.728-0.728]; AP@5 0.646 [0.646-0.646]; recall@5 0.881 [0.881-0.881]; AP@10 0.731 [0.731-0.731]; recall@10 0.950 [0.950-0.950]; in pair@10 0.654 [0.654-0.654]; already burning@10 0.840 [0.840-0.840]
+  st_all (3 seeds): late AP@5 0.655 [0.640-0.663]; late AP@10 0.740 [0.739-0.741]; AP@5 0.663 [0.661-0.665]; recall@5 0.894 [0.881-0.913]; AP@10 0.740 [0.740-0.740]; recall@10 0.955 [0.950-0.963]; in pair@10 0.737 [0.731-0.750]; already burning@10 0.862 [0.840-0.883]
+
+Differences of the seed means, 95 % period bootstrap (2000 resamples of the 1462 validation periods):
+  final_all-final_0414: skipped (no finished runs for final_all)
+  st_all-st_0414 (3 vs 1 seeds): AP@5 +0.017 [-0.003, +0.041], P(<=0) 0.049; AP@10 +0.009 [-0.005, +0.024], P(<=0) 0.097
+  st_0414-final_0414 (1 vs 3 seeds): AP@5 +0.011 [-0.013, +0.032], P(<=0) 0.190; AP@10 +0.027 [+0.007, +0.045], P(<=0) 0.003
+  st_all-final_all: skipped (no finished runs for final_all)
+  st_all-final_0414 (3 vs 3 seeds): AP@5 +0.028 [+0.007, +0.050], P(<=0) 0.004; AP@10 +0.036 [+0.019, +0.054], P(<=0) 0.000
