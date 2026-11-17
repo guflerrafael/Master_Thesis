@@ -1,0 +1,2 @@
+1 runs (1 experiments × 1 seeds) -> models/ablations_all/, outputs/ablations_all/
+[1/1] ablations_all/cnn3d_st_all_s0: cnn3d_st trained on 2004-2014 + 2017-2023 | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name ablations_all/cnn3d_st_all_s0 --seed 0 --resume --arch cnn3d_st --time-bins 12 --sigma-t 1 --neg-ratio 2 --train-splits train,train2,train3

@@ -57,6 +57,8 @@ Run from the repository root, in this order:
 24. `.venv/bin/python src/spacetime_checks.py > outputs/spacetime_checks.txt`: checks of the space-time targets, decoder and evaluation, time baselines (9.9)
 25. `.venv/bin/python src/run_ablations.py --only cnn3d_st --seeds 0 --folder ablations_st`, then `.venv/bin/python src/spacetime_eval.py ablations_st/cnn3d_st_s0 > outputs/spacetime_eval_s0.txt`: space-time model, validation by decoding, subgroup and time error (9.11)
 26. `.venv/bin/python src/plot_spacetime_examples.py`: example periods of `cnn3d_st` next to `cnn3d_final`, validation only (9.12)
+27. `.venv/bin/python -u src/weather_cloud_checks.py | tee outputs/weather_cloud/checks.txt`: fire weather / wind and cloud cover against the errors of `cnn3d_st`, validation only, needs the Quality files of 6.20 (9.13)
+28. All training years up to 2023, Mac + Colab in parallel (9.14): Mac `src/run_ablations.py --only cnn3d_st_all --seeds 0 --folder ablations_all`, Colab `colab/runs_colab.ipynb` with the other seeds, then `src/sync_runs.py --src <unzipped Drive folder> --folder ablations_all`; final models with `--final --folder final_2023`
 
 Since 2026-11-13 steps 1, 7, 9 and 10 use 2004–2025 (8.8); `src/clean_data.py` reads the ICNF SGIF export (`data/raw/icnf/`), which is not versioned.
 
@@ -1883,3 +1885,65 @@ Run `ablations_st/cnn3d_st_s0` (111 min on the M1). Best checkpoint at epoch 10 
 - **Fresh, isolated** (2015-10-01): model +0.6 h, rule +0.2 h, the typical case where the rule is better (9.11).
 - **Missed / random** (2015-07-23 18, 2015-04-02, 2015-03-25): weak or late signals (p 0.05–0.35) missed by both models; in 2015-04-02 the hourly curve peaks at the right time (7.5–8.5 h vs 7.0 h) but stays below the threshold.
 - **False alarm** (2015-04-03): one point near an ignore fire (neutral) and one false alarm on a hotspot cluster on the northern border.
+
+### 9.13 Would wind or a cloud channel help `cnn3d_st`? (2026-11-16)
+
+`src/weather_cloud_checks.py` → `outputs/weather_cloud/checks.txt`. Validation 2015–2016, `cnn3d_st_s0` (D1) and `cnn3d_final_s0`, operating point = best F1 at 10 km. No new data. The decision rules are in the script's docstring and were fixed before the run.
+
+**Wind without ERA5.** The SGIF export stores the FWI components of each record's day and place. The noon wind speed follows from inverting ISI = 0.208 · exp(0.05039 W) · f(FFMC) (Van Wagner 1987). For 2015–2016 it covers 99.9 % of 35,747 records; median 9.9 km/h, IQR 6.5–13.7, max 50 km/h, which is plausible for noon 10 m wind. Speed only, no direction.
+
+| Own-wind quartile (train edges 6.4 / 9.8 / 13.5 km/h) | Targets | Recall st / final (operating point) | Already burning | In pair | Median \|Δt\| model / rule |
+|---|---|---|---|---|---|
+| q1 (median 4.0 km/h) | 82 | 0.61 / 0.62 | 20 % | 9 % | 0.61 / 0.48 h |
+| q2 | 104 | 0.75 / 0.73 | 14 % | 9 % | 0.47 / 0.40 h |
+| q3 | 100 | 0.69 / 0.70 | 24 % | 9 % | 0.55 / 0.35 h |
+| q4 (median 16.1 km/h) | 117 | 0.57 / 0.57 | 34 % | 23 % | 0.87 / 0.84 h |
+
+- Windy days are outbreak days: more targets already burning and in pairs, and a larger time error for both the model and the rule. Recall q4 − q1: −0.04 [−0.17, +0.10]; the same for `cnn3d_final`. For already-burning targets, recall above vs. below the median wind is +0.06 [−0.15, +0.27]. Median \|Δt\| q4 − q1: model +0.26 h [−0.05, +0.57], rule +0.37 h [+0.05, +1.06].
+- **Re-scoring** (logistic regression on logit(score) + day weather, fitted on one validation year, applied to the other; 3,902 points): wind alone −0.003 [−0.013, +0.007] (national day value), −0.001 [−0.009, +0.007] (local, 50 km); wind + FWI +0.007 [−0.010, +0.022] / +0.009 [−0.003, +0.023]. The little signal there is comes from FWI, i.e. dryness (median FWI of false alarms 24 against 32 for hits), not from wind.
+- **Decision: NO-GO.** Wind speed carries nothing that the scores lack. The errors on windy days come from busy days (pairs, active fires), which the time axis already addresses. Wind direction is not tested here; a wind channel stays an ablation for objective (iv), not a priority for this model.
+
+**Cloud and time.** Not-observable share of the 5 × 5 window in the 3 h after the ICNF start (independent of when SEVIRI detected the fire; correlation 0.82 with the share up to the first detection):
+
+| Cloud in the 3 h after the start | Targets | Recall st / final | First-detection delay | TPs | Median \|Δt\| model / rule | Median Δt model |
+|---|---|---|---|---|---|---|
+| clear (< 0.2) | 341 | 0.67 / 0.67 | 0.25 h | 322 | 0.56 / 0.42 h | +0.05 h |
+| partly | 39 | 0.62 / 0.59 | 0.5 h | 38 | 0.71 / 0.42 h | +0.46 h |
+| cloudy (≥ 0.5) | 23 | 0.48 / 0.48 | 2.0 h | 23 | 1.48 / 1.58 h | +1.48 h |
+
+- Under cloud, SEVIRI sees the fire about 2 h late, and the model's time is just as late as the rule's (+1.5 h): it waits for the first detection and does not know that the cell was hidden. Cloudy − clear median \|Δt\|: model +0.92 h [+0.31, +1.43].
+- But only 23 of the 383 hits (6.0 %) are cloudy, below the 10 % of the rule, so fixing them would barely move the overall error. **Decision: NO training run** for a cloud channel. Recall at the operating point is also lower under cloud (0.48 vs. 0.67, 23 targets, roughly ±0.2), which 6.20 did not see with its period-wide cloud share; also too few targets to act on.
+- If a cloud channel is ever added (for example with a longer memory, 6.6), the target is clear: "hidden until hour h" should let the model move its time earlier for these cases.
+
+### 9.14 Training on all years up to 2023, on the Mac and Colab in parallel (2026-11-17)
+
+Code only; nothing trained yet.
+
+**Two ways to use the new years** (both never touch the test years 2024–2025):
+
+| Mode | Experiments (`run_ablations.py`) | Training years | Targets / crops per epoch | Validation |
+|---|---|---|---|---|
+| More data, still validated (7.7 E2) | `cnn3d_st_all`, `cnn3d_final_all` (tier 7) | train + train2 + train3 = 2004–2014, 2017–2023 | 2,739 / 8,217 (+38 %) | 2015–2016, comparable with every earlier run |
+| Final models (7.7 E3) | `--final` with the base experiments (`cnn3d_st`, `cnn3d_final`), `--folder final_2023` | all non-test years 2004–2023 | 3,142 / 9,426 (+59 %) | none, last epoch |
+
+`--final` refuses `--folder final` (the models of 6.17) and the `_all` experiments (it sets the years itself). Expected time on the M1 (scaled by crops from 9.10): `cnn3d_st_all` ≈ 5.5 min per epoch, ≈ 2 h 20 per seed with validation; `cnn3d_final_all` ≈ 1 h 15; final `cnn3d_st` ≈ 2 h 10 (no validation).
+
+**Mac and Colab at the same time.** Both run the same experiments into the same folder name with different seeds, e.g. Mac seed 0, Colab seeds 1 and 2. The Mac writes into the repository, Colab into Google Drive (`MyDrive/master_thesis_runs/{models,outputs}/<folder>/`). New pieces:
+
+- `train.py --resume`: after every epoch the full training state (model, optimiser, scheduler, history, best score, all random generators) goes to `models/<run>_last.pt`; a restarted run continues after its last finished epoch, also on another machine, and the file is deleted at the end. `run_ablations.py` always passes `--resume` and appends to the log of a resumed run. Checked: a run interrupted after epochs 1 and 2 and resumed twice ends with **exactly** the weights, losses and validation scores of the uninterrupted run (CPU, `cnn3d_st`, all years, validation every epoch; max weight difference 0.0).
+- Checkpoints are written atomically (temporary file + rename): a disconnect while saving to Drive leaves the previous file intact.
+- **Device check** (`train.py`, after the first epoch of every process, `--no-device-check` to skip): full-grid maps of 16 busy validation periods on the GPU, the exact validation path, against the CPU for two of them; the run stops above 1e-3. Mac: 3e-8 (`cnn3d_st`), 7e-9 (`cnn3d`). With the MPS sub-batching of 9.10 switched off, it stops with a difference of 0.71, so it catches that bug. On Colab it checks CUDA the same way.
+- `host` and `device` are written to the log and to `done.json`.
+- `src/sync_runs.py`: merges the finished runs of a downloaded Drive folder into `models/` and `outputs/`. Never overwrites: a run that is finished here with other content, or unfinished here (same seed on both machines), is reported as a conflict and skipped. Unfinished source runs are listed. Checked on a fake download: copy, second pass "identical", altered file "conflict".
+- `colab/runs_colab.ipynb`: configuration (experiments, seeds, folder, `FINAL`), GPU and Drive setup as in `ablations_colab.ipynb`, dry run, smoke test (shows the device check), run, progress, and one zip of the run folder on Drive for the download. `--workers 2`, no `--val-amp`, so the validation matches the Mac.
+- Smoke tests on the Mac: `cnn3d_st_all`, `cnn3d_final_all`, and `--final` for `cnn3d_st` / `cnn3d_final` all run (final mode: 3,142 positives, last epoch saved, no validation; smoke runs of `--final` go to `final_smoke/`).
+
+Hardware differs between seeds (M1 vs. T4, both full precision). The training numbers then differ in the last digits; the seed spread is far larger.
+
+**Commands.** Mac:
+
+```
+caffeinate -i .venv/bin/python -u src/run_ablations.py --only cnn3d_st_all --seeds 0 --folder ablations_all 2>&1 | tee -a outputs/ablations_all_progress.txt
+```
+
+Colab: `colab/runs_colab.ipynb` with `EXPERIMENTS = ["cnn3d_st_all"]`, `SEEDS = [1, 2]`, `FOLDER = "ablations_all"`, after committing and pushing. Merge: download `MyDrive/ablations_all_runs.zip`, unzip, then `.venv/bin/python src/sync_runs.py --src ~/Downloads/master_thesis_runs --folder ablations_all`. Compare with `ablations_st/cnn3d_st_s0` (and seeds 1, 2 on 2004–2014 if run) and `ablations_georef/cnn3d_final_s0-2`.

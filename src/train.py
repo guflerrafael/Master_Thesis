@@ -21,9 +21,22 @@ maps (D1 '3d', D2 'max', D0 '2d'); the checkpoint is chosen on D1, as for the 2D
 points are made batch by batch (no full set of maps in memory).
 
 Final models (notes.md 6.16): --train-splits train,val --no-val trains on 2004-2016 without
-validation and saves the last epoch; the test split can never be used for training. The splits are
+validation and saves the last epoch; the test split can never be used for training. All years up to
+2023 (notes.md 9.14): --train-splits train,train2,train3 (validated on 2015-2016) or
+train,val,train2,train3 --no-val (final). The splits are
 defined in tiling_design.SPLIT (train 2004-2014, val 2015-2016, train2 2017-2019, train3 2020-2023,
 test 2024-2025; notes.md 8.8).
+
+Resume (notes.md 9.14): after every epoch the full training state (model, optimiser, scheduler,
+history, best score, random generators) is written to models/<name>_last.pt; with --resume a run
+continues after its last finished epoch (also on another machine), and the state file is deleted when
+the run is complete. Checkpoints are written atomically (temporary file + rename), so a disconnect
+while saving (Colab, Google Drive) leaves the previous file intact.
+
+Device check (notes.md 9.10, 9.14): MPS returned silently wrong cnn3d_st outputs for large batches.
+After the first epoch of every process (also after a resume), the full-grid maps of --val-batch
+periods on the GPU are compared with the CPU for two of them (current weights, the exact prediction
+path of the validation); the run stops if they differ by more than 1e-3. --no-device-check skips it.
 
 Run from the repository root:
   .venv/bin/python src/train.py --name convlstm_v1 > outputs/convlstm_v1_log.txt
@@ -33,6 +46,8 @@ Ablation batches: src/run_ablations.py.
 """
 import argparse
 import json
+import os
+import socket
 import time
 
 import numpy as np
@@ -58,8 +73,10 @@ DEFAULTS = dict(step_agg=4, channels=list(DEFAULT_CHANNELS), history_h=HISTORY_H
                 rekindle_ignore=False, time_bins=0, sigma_t=1.0, aux2d_weight=1.0)
 
 
-def get_device():
-    """NVIDIA GPU (e.g. Google Colab) > Apple GPU (MPS) > CPU."""
+def get_device(name=None):
+    """NVIDIA GPU (e.g. Google Colab) > Apple GPU (MPS) > CPU; name forces one ('cuda', 'mps', 'cpu')."""
+    if name:
+        return torch.device(name)
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -401,6 +418,10 @@ def parse_args(argv=None):
     ap.add_argument("--train-splits", default="train", help="comma list of splits to train on (final models: train,val)")
     ap.add_argument("--no-val", action="store_true",
                     help="no validation; the checkpoint of the last epoch is saved (final models trained on train+val)")
+    ap.add_argument("--resume", action="store_true", help="continue from models/<name>_last.pt if it exists")
+    ap.add_argument("--device", default=None, choices=["cuda", "mps", "cpu"], help="default: cuda > mps > cpu")
+    ap.add_argument("--no-device-check", action="store_true", help="skip the GPU-vs-CPU check after epoch 1")
+    ap.add_argument("--stop-after", type=int, default=0, help="testing: exit after this epoch, keeping the resume state")
     # input
     ap.add_argument("--step-agg", type=int, default=DEFAULTS["step_agg"], help="15-min slots per model step (4 = hourly)")
     ap.add_argument("--channels", default=",".join(DEFAULT_CHANNELS), help=f"comma list from {','.join(ALL_CHANNELS)}")
@@ -433,11 +454,58 @@ def parse_args(argv=None):
     return args, chans
 
 
+# options that do not change what is trained: may differ between the parts of a resumed run
+RUN_ONLY = {"workers", "val_batch", "val_amp", "resume", "device", "no_device_check", "stop_after"}
+
+
+def save_atomic(obj, path):
+    """torch.save to a temporary file, then rename: a crash or disconnect never leaves a broken file."""
+    tmp = path.with_name(path.name + ".tmp")
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
+def rng_state(train):
+    st = {"torch": torch.get_rng_state(), "numpy": np.random.get_state(), "crops": train.rng.bit_generator.state}
+    if torch.cuda.is_available():
+        st["cuda"] = torch.cuda.get_rng_state_all()
+    return st
+
+
+def set_rng_state(st, train):
+    torch.set_rng_state(st["torch"]); np.random.set_state(st["numpy"]); train.rng.bit_generator.state = st["crops"]
+    if "cuda" in st and torch.cuda.is_available() and len(st["cuda"]) == torch.cuda.device_count():
+        torch.cuda.set_rng_state_all(st["cuda"])
+
+
+@torch.no_grad()
+def device_check(model, data, cfg, device, batch, tol=1e-3):
+    """Full-grid maps of `batch` busy validation periods on `device` (as in the validation) against
+    the CPU for two of them. Returns the largest absolute probability difference; raises above tol."""
+    if device.type == "cpu":
+        return 0.0
+    per = data.periods[(data.periods["split"] == "val") & (data.periods["n_det"] > 0)]
+    per = list(per.sort_values("n_det", ascending=False)["period"].head(batch))
+    dev = next(iter_maps(model, data, per, cfg, device, batch=batch))
+    cpu_model = build_model(cfg)
+    cpu_model.load_state_dict({k: v.detach().cpu() for k, v in model.state_dict().items()})
+    ref = {}
+    for p in per[:2]:
+        ref.update(next(iter_maps(cpu_model, data, [p], cfg, torch.device("cpu"), batch=1)))
+    flat = lambda m: np.concatenate([np.ravel(a) for a in (m if isinstance(m, tuple) else (m,))])
+    diff = max(float(np.abs(flat(dev[p]) - flat(ref[p])).max()) for p in ref)
+    model.train()
+    if diff > tol:
+        raise RuntimeError(f"device check failed: {device} differs from the CPU by {diff:.3g} (> {tol}) on full-grid "
+                           f"maps of {batch} periods per call; validate / predict on the CPU or with a smaller --val-batch")
+    return diff
+
+
 def main():
     args, chans = parse_args()
     cfg = config_from({**vars(args), "channels": chans, "flip": not args.no_flip})
     torch.manual_seed(args.seed); np.random.seed(args.seed)
-    device = get_device()
+    device = get_device(args.device)
     data = FireData()
     train_splits = [x.strip() for x in args.train_splits.split(",") if x.strip()]
     assert "test" not in train_splits, "never train on the test split"
@@ -466,14 +534,26 @@ def main():
         return loss
 
     to_dev = lambda v: [u.to(device) for u in v] if isinstance(v, (list, tuple)) else v.to(device)
-    print(f"device {device}; parameters {n_par:,}; train crops per epoch {len(train):,} "
+    print(f"host {socket.gethostname()}; device {device}; train splits {','.join(train_splits)}; parameters {n_par:,}; train crops per epoch {len(train):,} "
           f"({len(train.pos):,} positive); validation periods {len(val_periods):,}; config {cfg}", flush=True)
 
     ck_path = MODELS / f"{args.name}.pt"
     hist_path = OUTPUTS / f"{args.name}_history.csv"
     ck_path.parent.mkdir(parents=True, exist_ok=True); hist_path.parent.mkdir(parents=True, exist_ok=True)
-    history, best = [], -1.0
-    for epoch in range(1, args.epochs + 1):
+    last_path = MODELS / f"{args.name}_last.pt"
+    history, best, first_epoch = [], -1.0, 1
+    full_cfg = {**vars(args), **cfg}
+    if args.resume and last_path.exists():
+        st = torch.load(last_path, map_location="cpu", weights_only=False)
+        changed = {k for k in set(st["config"]) | set(full_cfg)
+                   if k not in RUN_ONLY and str(st["config"].get(k)) != str(full_cfg.get(k))}
+        assert not changed, f"resume state {last_path.name} was made with other settings: {sorted(changed)}"
+        model.load_state_dict(st["state_dict"]); opt.load_state_dict(st["opt"]); sched.load_state_dict(st["sched"])
+        history, best, first_epoch = st["history"], st["best"], st["epoch"] + 1
+        set_rng_state(st["rng"], train)
+        print(f"resumed from {last_path.relative_to(E.ROOT)} after epoch {st['epoch']} "
+              f"(made on {st.get('host', '?')}, {st.get('device', '?')}); best so far {best:.4f}", flush=True)
+    for epoch in range(first_epoch, args.epochs + 1):
         model.train(); train.resample()
         loader = torch.utils.data.DataLoader(train, batch_size=args.batch, shuffle=True, num_workers=args.workers,
                                              worker_init_fn=_worker_init if args.workers else None,
@@ -489,10 +569,15 @@ def main():
             opt.step(); losses.append(loss.item())
         sched.step()
         rec = {"epoch": epoch, "train_loss": float(np.mean(losses)), "train_min": (time.time() - t0) / 60}
+        if epoch == first_epoch and not args.no_device_check:      # also after a resume on another machine
+            if device.type == "cpu":
+                print("device check: not needed on the CPU", flush=True)
+            else:
+                diff = device_check(model, data, cfg, device, args.val_batch)
+                print(f"device check: {device} vs. CPU, full grid, {args.val_batch} periods per call: max |dp| {diff:.2e}", flush=True)
         if args.no_val:
             if epoch == args.epochs:                                   # last epoch = final model
-                torch.save({"state_dict": model.state_dict(), "config": {**vars(args), **cfg}, "epoch": epoch, "val": {}},
-                           ck_path)
+                save_atomic({"state_dict": model.state_dict(), "config": full_cfg, "epoch": epoch, "val": {}}, ck_path)
                 rec["saved"] = True
         elif epoch % args.val_every == 0 or epoch == args.epochs:
             t1 = time.time()
@@ -519,14 +604,21 @@ def main():
             if score > best:
                 best = score
                 val = {k: float(v) for k, v in rec.items() if k != "epoch"}   # plain floats: loads with weights_only
-                torch.save({"state_dict": model.state_dict(), "config": {**vars(args), **cfg}, "epoch": epoch, "val": val},
-                           ck_path)
+                save_atomic({"state_dict": model.state_dict(), "config": full_cfg, "epoch": epoch, "val": val}, ck_path)
                 rec["saved"] = True
         history.append(rec)
         print(json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in rec.items()}), flush=True)
         pd.DataFrame(history).to_csv(hist_path, index=False)          # after every epoch (resumable logs)
-    done = {"name": args.name, "best_mean_ap": best, "epochs": args.epochs, "config": cfg}
+        save_atomic({"state_dict": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
+                     "epoch": epoch, "history": history, "best": best, "rng": rng_state(train), "config": full_cfg,
+                     "host": socket.gethostname(), "device": str(device)}, last_path)
+        if args.stop_after and epoch == args.stop_after and epoch < args.epochs:
+            print(f"stopped after epoch {epoch} (--stop-after); resume state {last_path.relative_to(E.ROOT)}", flush=True)
+            return
+    done = {"name": args.name, "best_mean_ap": best, "epochs": args.epochs, "config": cfg,
+            "host": socket.gethostname(), "device": str(device), "train_splits": train_splits}
     (OUTPUTS / f"{args.name}_done.json").write_text(json.dumps(done, indent=1, default=str))   # run complete
+    last_path.unlink(missing_ok=True)
     print(f"best mean AP (val) {best:.4f}; checkpoint {ck_path.relative_to(E.ROOT)}", flush=True)
 
 
