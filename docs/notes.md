@@ -1964,7 +1964,7 @@ Runs `ablations_all/cnn3d_st_all_s{0,1,2}` (train + train2 + train3 = 2004–201
 
 Late epochs 16–20 (less dependent on the checkpoint choice), mean of the epochs: `cnn3d_st_all` 0.655 / 0.740 (seed range at each epoch 0.638–0.665 / 0.736–0.743), `cnn3d_st` seed 0 0.632 / 0.728, `cnn3d_final` 0.623 / 0.699.
 
-- **More years help, mostly at 10 km:** +0.017 / +0.009 over `cnn3d_st` seed 0 at the best checkpoint, +0.023 / +0.012 over the late epochs. At 10 km every all-years seed lies above the 2004–2014 run at every epoch from 12 on; at 5 km the lowest all-years seed (s2 late, 0.640) is about level with it. The 2004–2014 configuration has one seed only, so the size of the data effect has an uncertainty of about the `cnn3d_final` seed spread (±0.008 at 5 km). **With a period bootstrap (9.16) the data effect is not established:** +0.017 [−0.003, +0.041] / +0.009 [−0.005, +0.024]. The combined gain over `cnn3d_final` is: +0.028 [+0.007, +0.050] / +0.036 [+0.019, +0.054].
+- **More years seem to help, mostly at 10 km, but this is not established (see the bootstrap below and 9.16):** +0.017 / +0.009 over `cnn3d_st` seed 0 at the best checkpoint, +0.023 / +0.012 over the late epochs. At 10 km every all-years seed lies above the 2004–2014 run at every epoch from 12 on; at 5 km the lowest all-years seed (s2 late, 0.640) is about level with it. The 2004–2014 configuration has one seed only, so the size of the data effect has an uncertainty of about the `cnn3d_final` seed spread (±0.008 at 5 km). **With a period bootstrap (9.16) the data effect is not established:** +0.017 [−0.003, +0.041] / +0.009 [−0.005, +0.024]. The combined gain over `cnn3d_final` is: +0.028 [+0.007, +0.050] / +0.036 [+0.019, +0.054].
 - **The three all-years seeds agree closely** (AP@10 0.740 for all three; AP@5 within 0.004), across two kinds of hardware. No visible MPS vs. CUDA effect.
 - **Against `cnn3d_final`:** +0.028 / +0.036 in total. Training on 2020–2023 (LSA SAF download, a different source from the 2004–2019 extract) does not hurt validation on the 2015–2016 extract: first evidence for 7.7 E2 that the two sources can be mixed.
 - **Gate 1 now passes** (D0 −0.002 / +0.010 against `cnn3d_final`; it failed with −0.030 / −0.015 in 9.11). **Gate 2 passes on two of three seeds** (D1 − D2: −0.003 / 0.000, +0.019 / +0.014, +0.013 / +0.013). D1 keeps its advantage where it matters: in-pair recall @ 10 km 0.74 against 0.53 for D2, already burning 0.86 against 0.75.
@@ -1999,10 +1999,23 @@ Late epochs 16–20 (less dependent on the checkpoint choice), mean of the epoch
 | `cnn3d_st` all years − 2004–2014 | 3 vs 1 | +0.017 [−0.003, +0.041] | +0.009 [−0.005, +0.024] |
 | `cnn3d_st` − `cnn3d_final`, 2004–2014 | 1 vs 3 | +0.011 [−0.013, +0.032] | +0.027 [+0.007, +0.045] |
 | `cnn3d_st` all years − `cnn3d_final` 2004–2014 | 3 vs 3 | +0.028 [+0.007, +0.050] | +0.036 [+0.019, +0.054] |
-| `cnn3d_final` all years − 2004–2014 | 3 vs 3 | pending | pending |
-| `cnn3d_st` − `cnn3d_final`, all years | 3 vs 3 | pending | pending |
+| `cnn3d_final` all years − 2004–2014 | 3 vs 3 | −0.002 [−0.015, +0.011] | +0.002 [−0.008, +0.013] |
+| **`cnn3d_st` − `cnn3d_final`, all years** | 3 vs 3 | **+0.030 [+0.006, +0.053]** | **+0.034 [+0.016, +0.051]** |
 
-So far: the combined improvement is clear at both radii. The architecture effect is clear at 10 km. The data effect points the same way on every seed but is within the period noise. The two pending rows split the combined gain cleanly into data and architecture with 3 seeds each.
+Runs `ablations_all/cnn3d_final_all_s{0,1,2}` on Colab (CUDA; device check 5–6e-7; seed 2 resumed once after a disconnect). Per configuration (mean over 3 seeds, best checkpoints, current evaluation):
+
+| Configuration | AP @ 5 / 10 km | Late epochs 16–20 | Recall in pair @ 10 (52) | Already burning @ 10 (94) |
+|---|---|---|---|---|
+| `cnn3d_final`, 2004–2014 | 0.635 / 0.704 | 0.623 / 0.699 | 0.44 | 0.70 |
+| `cnn3d_final`, all years | 0.633 / 0.706 | 0.625 / 0.705 | 0.46 | 0.70 |
+| `cnn3d_st`, 2004–2014 (1 seed) | 0.646 / 0.731 | 0.632 / 0.728 | 0.65 | 0.84 |
+| `cnn3d_st`, all years | **0.663 / 0.740** | **0.655 / 0.740** | **0.74** | **0.86** |
+
+- **More data does nothing for the 2D model:** −0.002 / +0.002, with an interval of about ±0.013. Best epochs move later (18, 10, 14 against 12, 10, 14), but the plateau is the same. With 38 % more crops, the 2D map target is saturated at this model size.
+- **The space-time model is the gain, and it holds with 3 seeds on each side:** +0.030 / +0.034 at equal data, both intervals above zero. It is also where the 9.3 analysis expected it: in-pair recall 0.46 → 0.74, already burning 0.70 → 0.86.
+- **The data effect for `cnn3d_st` stays open:** +0.017 / +0.009 against a single 2004–2014 seed, interval includes zero. That it is larger than for the 2D model fits a richer target (12 hourly maps) and a larger model (162,258 parameters against 63,073), but one 2004–2014 seed cannot separate it from noise. Seeds 1 and 2 of `cnn3d_st` on 2004–2014 (about 1 h 15 on Colab) would settle it; this matters for the thesis text, not for the final model.
+- **For 7.7 E2:** adding 2017–2023, including the LSA SAF years 2020–2023, never hurts validation on the 2015–2016 extract, for either model. Training the final models on all non-test years is safe.
+- **Consequence:** the decision for the final models (9.15, consequence 1) stands. The test comparison (E4) is `cnn3d_st` against `cnn3d_final`, both trained on 2004–2023 (`final_2023/`).
 
 **Commands.** Colab, `colab/runs_colab.ipynb` (now preset: `EXPERIMENTS = ["cnn3d_final_all"]`, `SEEDS = [0, 1, 2]`, `FOLDER = "ablations_all"`; about 20 min per seed on a T4). This needs the changes pushed. Alternatively, on the Mac (about 1 h 15 per seed), give the Mac and Colab different seeds:
 
