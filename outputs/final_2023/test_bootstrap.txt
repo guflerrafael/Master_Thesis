@@ -1,0 +1,33 @@
+st_2023: 3 finished runs (final_2023/cnn3d_st_s*)
+final_2023: 3 finished runs (final_2023/cnn3d_final_s*)
+final_2016: 3 finished runs (final/cnn3d_final_s*)
+conv_2016: 3 finished runs (final/conv_final_s*)
+
+Per run (test, current evaluation; late = mean of the validated epochs 16-20 in the history):
+                           best epoch  late AP@5  late AP@10   AP@5  recall@5  AP@10  recall@10  in pair@10  already burning@10
+config     run                                                                                                                 
+st_2023    cnn3d_st_s0             20        NaN         NaN  0.587     0.922  0.634      0.966       0.765               0.860
+           cnn3d_st_s1             20        NaN         NaN  0.616     0.931  0.668      0.978       0.824               0.884
+           cnn3d_st_s2             20        NaN         NaN  0.582     0.918  0.646      0.974       0.706               0.907
+final_2023 cnn3d_final_s0          20        NaN         NaN  0.575     0.884  0.613      0.918       0.471               0.674
+           cnn3d_final_s1          20        NaN         NaN  0.587     0.888  0.625      0.927       0.588               0.767
+           cnn3d_final_s2          20        NaN         NaN  0.549     0.866  0.601      0.918       0.471               0.651
+final_2016 cnn3d_final_s0          20        NaN         NaN  0.571     0.875  0.612      0.927       0.529               0.721
+           cnn3d_final_s1          20        NaN         NaN  0.550     0.884  0.602      0.927       0.588               0.721
+           cnn3d_final_s2          20        NaN         NaN  0.550     0.888  0.597      0.927       0.529               0.721
+conv_2016  conv_final_s0           20        NaN         NaN  0.591     0.888  0.627      0.922       0.529               0.674
+           conv_final_s1           20        NaN         NaN  0.589     0.879  0.644      0.927       0.529               0.744
+           conv_final_s2           20        NaN         NaN  0.554     0.862  0.587      0.901       0.529               0.605
+
+Per configuration (mean, min, max over seeds):
+  st_2023 (3 seeds): late AP@5 nan [nan-nan]; late AP@10 nan [nan-nan]; AP@5 0.595 [0.582-0.616]; recall@5 0.924 [0.918-0.931]; AP@10 0.649 [0.634-0.668]; recall@10 0.973 [0.966-0.978]; in pair@10 0.765 [0.706-0.824]; already burning@10 0.884 [0.860-0.907]
+  final_2023 (3 seeds): late AP@5 nan [nan-nan]; late AP@10 nan [nan-nan]; AP@5 0.570 [0.549-0.587]; recall@5 0.879 [0.866-0.888]; AP@10 0.613 [0.601-0.625]; recall@10 0.921 [0.918-0.927]; in pair@10 0.510 [0.471-0.588]; already burning@10 0.698 [0.651-0.767]
+  final_2016 (3 seeds): late AP@5 nan [nan-nan]; late AP@10 nan [nan-nan]; AP@5 0.557 [0.550-0.571]; recall@5 0.882 [0.875-0.888]; AP@10 0.603 [0.597-0.612]; recall@10 0.927 [0.927-0.927]; in pair@10 0.549 [0.529-0.588]; already burning@10 0.721 [0.721-0.721]
+  conv_2016 (3 seeds): late AP@5 nan [nan-nan]; late AP@10 nan [nan-nan]; AP@5 0.578 [0.554-0.591]; recall@5 0.876 [0.862-0.888]; AP@10 0.619 [0.587-0.644]; recall@10 0.917 [0.901-0.927]; in pair@10 0.529 [0.529-0.529]; already burning@10 0.674 [0.605-0.744]
+
+Differences of the seed means, 95 % period bootstrap (2000 resamples of the 1458 test periods):
+  st_2023-final_2023 (3 vs 3 seeds): AP@5 +0.025 [-0.004, +0.054], P(<=0) 0.051; AP@10 +0.036 [+0.004, +0.066], P(<=0) 0.013
+  final_2023-final_2016 (3 vs 3 seeds): AP@5 +0.013 [-0.011, +0.038], P(<=0) 0.145; AP@10 +0.010 [-0.012, +0.035], P(<=0) 0.191
+  st_2023-final_2016 (3 vs 3 seeds): AP@5 +0.038 [+0.009, +0.066], P(<=0) 0.005; AP@10 +0.046 [+0.017, +0.075], P(<=0) 0.001
+  st_2023-conv_2016 (3 vs 3 seeds): AP@5 +0.018 [-0.016, +0.056], P(<=0) 0.153; AP@10 +0.030 [-0.004, +0.065], P(<=0) 0.037
+  conv_2016-final_2016 (3 vs 3 seeds): AP@5 +0.021 [-0.018, +0.055], P(<=0) 0.151; AP@10 +0.016 [-0.011, +0.044], P(<=0) 0.153

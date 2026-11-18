@@ -61,6 +61,10 @@ Run from the repository root, in this order:
 28. All training years up to 2023, Mac + Colab in parallel (9.14): Mac `src/run_ablations.py --only cnn3d_st_all --seeds 0 --folder ablations_all`, Colab `colab/runs_colab.ipynb` with the other seeds, then `src/sync_runs.py --src <unzipped Drive folder> --folder ablations_all`; final models with `--final --folder final_2023`
 29. `for s in 0 1 2; do .venv/bin/python src/spacetime_eval.py ablations_all/cnn3d_st_all_s$s > outputs/spacetime_eval_all_s$s.txt; done`: validation of the all-years runs by decoding, subgroup and time error (9.15)
 30. `.venv/bin/python src/compare_runs.py > outputs/compare_runs.txt`: re-scores every finished run of the 2004–2014 / all-years configurations on validation, differences with a period bootstrap (9.16)
+31. `.venv/bin/python src/evaluate_test.py --folders ablations_all --experiments cnn3d_st_all cnn3d_final_all --out final_smoke`: code check of the test evaluation on validation, place and time (9.17)
+32. `.venv/bin/python -u src/time_combination.py | tee outputs/time_combination.txt`: choice of the combined ignition time on validation, after step 30 (9.18)
+33. Final models on Colab (`runs_colab.ipynb`, `FINAL = True`, `FOLDER = "final_2023"`), `sync_runs.py --folder final_2023`, then `src/compare_runs.py --group 'st_2023=final_2023/cnn3d_st_s*' --group 'final_2023=final_2023/cnn3d_final_s*' ...` for the in-sample check (9.19)
+34. `.venv/bin/python src/evaluate_test.py --folders final final_2023 --experiments cnn3d_st cnn3d_final conv_final --out final_2023 --confirm-test > outputs/final_2023/test_log.txt`, then `src/compare_runs.py --split test --confirm-test --group ...` (`outputs/final_2023/test_bootstrap.txt`): the single test, run once (9.20)
 
 Since 2026-11-13 steps 1, 7, 9 and 10 use 2004–2025 (8.8); `src/clean_data.py` reads the ICNF SGIF export (`data/raw/icnf/`), which is not versioned.
 
@@ -2029,3 +2033,126 @@ Then download and unzip `MyDrive/ablations_all_runs.zip`, merge, and compare:
 .venv/bin/python src/sync_runs.py --src ~/Downloads/master_thesis_runs --folder ablations_all
 .venv/bin/python src/compare_runs.py > outputs/compare_runs.txt
 ```
+
+### 9.17 `evaluate_test.py` supports `cnn3d_st` and the ignition time (2026-11-17)
+
+The single test evaluation (E4) now also scores the ignition time. `cnn3d_st` checkpoints were already decoded with D1 by `predict()` (points with `t_h`); new:
+
+- **Time table** for every method: time error of the true positives @ 5 / 10 km (median |Δt|, median Δt, share ≤ 1 / 2 h, median |Δt| by isolated / in pair / already burning / rekindle) and the space-time AP (τ = 1, 2, 3 h). Two time variants: `model`, the method's own time (`cnn3d_st` D1; the nucleus-birth baseline's birth time); `rule`, the first-detection rule on the method's own points, lag of `train` (+0.38 h) removed. The rule variant gives the 2D models a time as well, and compares `cnn3d_st` with the rule on the same points. Output `outputs/<out>/<split>_time_{per_seed,summary}.csv` and a section in `<split>_results.md`.
+- Recall also by `in_pair` / `already_burning`; more plot colours (more than three methods); final checkpoints without a stored epoch are accepted.
+
+**Code check on validation** (no `--confirm-test`; `--folders ablations_all --experiments cnn3d_st_all cnn3d_final_all --out final_smoke`, gitignored): reproduces 9.15–9.16 exactly (AP 0.663 / 0.740 and 0.633 / 0.706; in-pair recall 0.74 / 0.46; time of `cnn3d_st` 0.63 h, rule 0.47 h @ 10 km).
+
+| Validation @ 10 km (3 seeds) | TPs | median \|Δt\| | ≤ 1 h | AP τ = 1 / 2 / 3 h | in pair | already burning |
+|---|---|---|---|---|---|---|
+| `cnn3d_st`, model time | 385 | 0.63 h | 65 % | 0.464 / **0.595** / **0.649** | **1.34 h** | **1.44 h** |
+| `cnn3d_st`, rule time | 385 | 0.47 h | 66 % | 0.464 / 0.564 / 0.617 | 1.80 h | 2.35 h |
+| `cnn3d_final`, rule time | 363 | 0.42 h | 67 % | 0.443 / 0.540 / 0.603 | 1.98 h | 2.24 h |
+
+The median alone favours `cnn3d_final` + rule (0.42 h): it finds mostly fresh, isolated fires, which are the easy cases for the rule. The space-time AP, which counts place and time together, is the fair comparison: `cnn3d_st` with its own time is +0.055 at τ = 2 h.
+
+Test command after the final runs are merged: `.venv/bin/python src/evaluate_test.py --folders final final_2023 --experiments cnn3d_st cnn3d_final conv_final --out final_2023 --confirm-test` (missing checkpoints are skipped).
+
+### 9.18 Combined ignition time for `cnn3d_st`, fixed on validation (2026-11-18)
+
+`src/time_combination.py` → `outputs/time_combination.txt`; functions `baselines.time_evidence()` and `combined_times()`. Fixed before the test, on the D1 points of `ablations_all/cnn3d_st_all_s{0,1,2}`. Only the times change; the place AP is the same.
+
+**Rule.** Use the first-detection time (lag of `train` removed) where the place was quiet for at least *q* h before that detection and the rule agrees with the model within *a* h; the model time otherwise. Grid *q* ∈ {0, 1, 2, 3, 6, 12, 24}, *a* ∈ {∞, 3, 2, 1.5, 1, 0.5}. Objective: time-aware AP, mean of τ = 1, 2 h and k = 5, 10 km, mean of 3 seeds. Selection rule fixed before the run: choose on one year, score on the other (both directions); keep the best candidate on the mean of the two years, only if both cross-year choices beat the model time.
+
+- Cross-year check passes: chosen on 2015 (*q* 24, *a* 1) → 2016 +0.003; chosen on 2016 (*q* 12, *a* 1.5) → 2015 +0.010.
+- **Choice: *q* ≥ 12 h, *a* ≤ 1.5 h** (`COMBINED_QUIET_H`, `COMBINED_AGREE_H` in `evaluate_test.py`). The rule time is used for about half of the points.
+- The agreement criterion does the work: with *a* = 1.5 h, every *q* from 0 to 6 h gives almost the same objective (0.5185 vs 0.5196). The rule sharpens the time where it confirms the model; where they disagree (pairs, active fires), the model is kept.
+
+| Validation @ 10 km, 3 seeds | median \|Δt\| | median Δt | ≤ 1 h | ≤ 2 h | AP τ = 1 / 2 / 3 h | isolated | in pair | already burning | rekindle |
+|---|---|---|---|---|---|---|---|---|---|
+| model | 0.63 h | +0.08 h | 65 % | **80 %** | 0.464 / **0.595** / 0.649 | 0.37 h | **1.34 h** | **1.44 h** | **1.27 h** |
+| rule wherever detected | 0.48 h | −0.14 h | 66 % | 78 % | 0.464 / 0.564 / 0.618 | **0.25 h** | 1.81 h | 2.38 h | 1.59 h |
+| **combined** | **0.45 h** | −0.03 h | **67 %** | **80 %** | **0.485** / 0.594 / **0.651** | 0.26 h | 1.36 h | 1.50 h | 1.33 h |
+
+The combination takes the best of both: the rule's precision on fresh, isolated fires (0.26 h) and the model's robustness for pairs and active fires (1.36 h, 1.50 h). Median error −0.18 h and nearly no bias; AP τ = 1 h +0.021; τ = 2–3 h unchanged. A modest, robust gain, to report next to the model and rule times.
+
+`evaluate_test.py` reports it as the time variant `combined` for space-time checkpoints.
+
+### 9.19 Final models `final_2023/` trained on 2004–2023: checks (2026-11-18)
+
+Trained on Colab (`colab/runs_colab.ipynb`, `FINAL = True`), downloaded and merged into `models/final_2023/`, `outputs/final_2023/` (`sync_runs.py`: all finished runs identical to the download). 2024–2025 untouched.
+
+**Completeness.** `cnn3d_st_s{0,1,2}` and `cnn3d_final_s{0,1}`: 20 epochs, last epoch saved. **`cnn3d_final_s2` is unfinished** (Colab compute ran out after epoch 10 of 20); its resume state `models/final_2023/cnn3d_final_s2_last.pt` is on Drive only (the download zip leaves out `*_last.pt`). About 8 min on a T4 or 30 min on the Mac to finish (`--resume` continues after epoch 10 on any machine, 9.14).
+
+**Integrity (logs).**
+- Every run: `train splits train,val,train2,train3`, 9,426 crops per epoch (3,142 positive), CUDA, device check 4–7e-7, no validation during training (`best_mean_ap` = −1, as intended in final mode). The "validation periods 844" in the log are only used by the device check.
+- Training loss decreases steadily in every run; epoch 20: `cnn3d_st` 1.49 / 1.59 / 1.52 (all-years runs with validation: 1.59 / 1.65 / 1.56, on 13 % fewer crops), `cnn3d_final` 0.62 / 0.60.
+- `cnn3d_st` seeds 1 and 2 have a mean loss of 32–33 in epoch 1 (seed 0: 3.4). This is a few early batches with a large loss. They also occur on a smaller scale in the Colab all-years runs (seed 2: 8.8). From epoch 2 on the runs are normal (2.27 / 2.19 vs 2.16). It does not affect the result (below), but the first-epoch spike is worth knowing about (possible fix for later work: a short learning-rate warm-up).
+
+**In-sample check on 2015–2016** (`compare_runs.py` → `outputs/final_2023/val_insample_check.txt`). These years are now training data, so this is **not a performance estimate**, only a check that the checkpoints are healthy and ordered as expected.
+
+| AP @ 5 / 10 km | trained without 2015–2016 (9.16) | `final_2023`, in-sample | Δ | In pair @ 10 | Already burning @ 10 |
+|---|---|---|---|---|---|
+| `cnn3d_st` (3 seeds) | 0.663 / 0.740 | 0.716 / 0.799 (0.706–0.730 / 0.791–0.807) | +0.053 / +0.058 | 0.74 → 0.83 | 0.86 → 0.93 |
+| `cnn3d_final` (2 seeds) | 0.633 / 0.706 | 0.673 / 0.753 (0.666–0.681 / 0.736–0.770) | +0.041 / +0.047 | 0.46 → 0.46 | 0.70 → 0.72 |
+
+- All checkpoints work, and the gain from seeing these years in training is moderate (+0.04 to +0.06). The models fit the data without memorising it.
+- The ordering is unchanged: `cnn3d_st` − `cnn3d_final` +0.043 / +0.045 in-sample, against +0.030 / +0.034 out of sample.
+- The 2D model's in-pair recall stays at 0.46 even on its own training years: a single 12 h map cannot separate two ignitions ≤ 2 cells apart. This is a limit of the target, not of the data, and the clearest argument for the space-time target.
+- The spread over seeds is wider than for the best checkpoints of 9.15 (0.706–0.730 at 5 km), as expected from taking the last epoch without selection. The test therefore reports the mean ± std over seeds.
+
+**Next: the single test (E4).** `cnn3d_final_s2` should be finished first, so the test is run once with all 6 checkpoints.
+
+### 9.20 Single test on 2024–2025 (E4) (2026-11-18)
+
+Run once, after every choice was fixed on validation (models 9.16/9.19, decoding D1, combined time 9.18):
+`.venv/bin/python src/evaluate_test.py --folders final final_2023 --experiments cnn3d_st cnn3d_final conv_final --out final_2023 --confirm-test`
+→ `outputs/final_2023/test_results.md`, `test_{results,time}_{per_seed,summary}.csv`, `test_log.txt`, `figures/final_2023/test_pr.png`. Intervals: `compare_runs.py --split test --confirm-test` (new option, cache per split; only intervals on the same predictions, no choices) → `outputs/final_2023/test_bootstrap.txt`. `cnn3d_final_s2` of `final_2023` ran epochs 11–20 on the Mac (MPS, device check 1e-6) after a Colab disconnect; loss at epoch 20 0.606 (seeds 0 / 1: 0.62 / 0.60).
+
+Test: 1,458 periods, **232 targets** (2024: 111, 2025: 121); 90 isolated, 17 in a close pair, 43 already burning, 15 rekindles; 100 in the top FWI quartile; 50 ≥ 1,000 ha.
+
+**Place (mean ± std over 3 seeds).**
+
+| Method | Trained on | AP @ 5 km | AP @ 10 km | Recall @ 10 | Best F1 @ 10 (P / R) | False alarms / day @ best F1 |
+|---|---|---|---|---|---|---|
+| nucleus-birth baseline | – | 0.409 | 0.445 | 0.815 | 0.544 | 0.16 |
+| `cnn3d_final` | 2004–2016 (6.17) | 0.557 ± 0.012 | 0.603 ± 0.008 | 0.927 | 0.612 | 0.14 |
+| `conv_final` | 2004–2016 (6.17) | 0.578 ± 0.021 | 0.619 ± 0.029 | 0.917 | 0.613 | 0.07 |
+| `cnn3d_final` | 2004–2023 | 0.570 ± 0.019 | 0.613 ± 0.012 | 0.921 | 0.651 (0.63 / 0.68) | 0.13 |
+| **`cnn3d_st`** | 2004–2023 | **0.595 ± 0.018** | **0.649 ± 0.017** | **0.973** | 0.650 (0.68 / 0.63) | 0.10 |
+
+| Difference of seed means (95 % period bootstrap) | Δ AP @ 5 km | Δ AP @ 10 km |
+|---|---|---|
+| **`cnn3d_st` − `cnn3d_final`, both 2004–2023** | +0.025 [−0.004, +0.054] | **+0.036 [+0.004, +0.066]** |
+| `cnn3d_st` 2023 − `cnn3d_final` 2016 | **+0.038 [+0.009, +0.066]** | **+0.046 [+0.017, +0.075]** |
+| `cnn3d_final` 2023 − 2016 (more years, new source) | +0.013 [−0.011, +0.038] | +0.010 [−0.012, +0.035] |
+| `cnn3d_st` 2023 − `conv_final` 2016 | +0.018 [−0.016, +0.056] | +0.030 [−0.004, +0.065] |
+
+| Recall @ 10 km by subgroup | `cnn3d_final` 2023 | `cnn3d_st` 2023 |
+|---|---|---|
+| in a close pair (17) | 0.51 | **0.77** |
+| already burning (43) | 0.70 | **0.88** |
+| not isolated (142) / isolated (90) | 0.88 / 0.99 | **0.96** / 1.00 |
+| ≥ 1,000 ha (50) | 0.89 | **0.99** |
+| top FWI quartile (100) | 0.88 | **0.95** |
+| forest (94) | 0.86 | **0.95** |
+| AP 2024 / 2025 | 0.718 / 0.574 | 0.742 / 0.622 |
+
+- **The space-time gain replicates on unseen years.** At equal training data: +0.025 / +0.036, against +0.030 / +0.034 on validation (9.16); at 10 km the interval excludes zero, at 5 km it touches it (P(≤ 0) = 0.05). The pattern is the one predicted in 9.3 and seen on validation: the extra recall is in close pairs (+0.26, 17 targets) and already-burning places (+0.18, 43 targets), and on large, high-FWI and forest fires, i.e. the busy days. Isolated fires are found by every model.
+- **At one operating point the F1 is the same** (0.650 vs 0.651 @ 10 km): `cnn3d_st` there has higher precision (0.68 vs 0.63) and fewer false alarms (0.10 vs 0.13 per day), `cnn3d_final` higher recall. The AP gain comes from the ranking over all thresholds and the high-recall end of the curve (`test_pr.png`: the curves are level up to recall ≈ 0.6, `cnn3d_st` stays higher beyond it and reaches recall 0.97).
+- **More years do not help the 2D model on the test either** (+0.013 / +0.010, n.s.), as on validation (9.16). The new LSA SAF source (2020–2025) is no problem in either direction: models trained only on the 2004–2016 extract work on 2024–2025 about as well as models that saw 2020–2023.
+- **`conv_final` (trained to 2016) is level with the 2D models** and the lead of `cnn3d_st` over it is not established (+0.018 / +0.030). It was not retrained on 2004–2023 and has no space-time variant, so this is not a like-for-like comparison; it has the fewest false alarms per day (0.07).
+- **All models score lower than on validation** (`cnn3d_st` 0.595 / 0.649 vs 0.663 / 0.740 on 2015–2016 when not trained on it). The drop is about the same for every model and for the baseline (0.448 / 0.577 → 0.409 / 0.445), so it reflects the test years, not overfitting: 2025 is much harder (AP 0.62 vs 0.74 in 2024), with more large fires on extreme-weather days.
+
+**Time (true positives @ 10 km, mean over seeds).**
+
+| Method, time | median \|Δt\| | ≤ 1 h | AP τ = 1 / 2 / 3 h | in pair | already burning |
+|---|---|---|---|---|---|
+| nucleus birth, own time | 0.40 h | 74 % | 0.278 / 0.354 / 0.417 | 0.48 h | 2.05 h |
+| `cnn3d_final` 2023, rule | 0.30 h | 72 % | 0.415 / 0.493 / 0.540 | 0.22 h | 3.01 h |
+| `cnn3d_st`, rule | 0.33 h | 69 % | 0.451 / 0.529 / 0.572 | 0.75 h | 3.01 h |
+| `cnn3d_st`, model | 0.46 h | 72 % | 0.477 / 0.575 / 0.615 | 1.24 h | **1.46 h** |
+| **`cnn3d_st`, combined (9.18)** | **0.33 h** | 72 % | **0.489 / 0.582 / 0.615** | 1.23 h | 1.69 h |
+
+- **Place and time together, `cnn3d_st` with the combined time is clearly ahead of the 2D model with the rule:** AP τ = 1 h +0.074, τ = 2 h +0.089. That is more than twice the place-only gain, because it finds more targets *and* times the already-burning ones better (1.7 h vs 3.0 h).
+- **The combined time replicates its validation result:** median error 0.46 → 0.33 h (the rule's precision on fresh fires), AP τ = 1 h +0.012, τ = 2 h +0.007 over the model time, while keeping the model's advantage on already-burning places.
+- The rule alone has a small median error on the 2D model's points (0.30 h) because those are mostly fresh fires; the in-pair medians (17 targets, 9 to 13 hits per model) are too small to compare.
+
+**Caveats.** One test, 232 targets; the subgroup numbers (pairs 17, rekindles 15) are small. The intervals cover the choice of periods; the seed spread (±0.01–0.02) is printed separately. 2025 ICNF records may still be provisional (7.8). `conv_final` was not retrained on 2004–2023.
+
+**Conclusion.** The space-time model is the best method on the held-out years: +0.036 AP @ 10 km over the same 2D model trained on the same data (+0.025 @ 5 km, borderline), with the gain where the design targeted it (close pairs, already-burning places, busy high-FWI days), and a clearly better space-time AP (+0.07 to +0.09) when the ignition time counts. More training years and the new data source change little for either model.

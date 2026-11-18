@@ -1,0 +1,23 @@
+host 7c09c6d199bd; device cuda; train splits train,val,train2,train3; parameters 162,258; train crops per epoch 9,426 (3,142 positive); validation periods 844; config {'step_agg': 4, 'channels': ['frp', 'confidence', 'detected', 'period', 'time', 'pt', 'persistent'], 'history_h': 6, 'tail_h': 6, 'arch': 'cnn3d_st', 'layers': 2, 'hidden': 32, 'kernel': 3, 'readout': 'last', 'crop': 32, 'sigma': 1.0, 'ignore_r': 2.0, 'min_target_ha': None, 'loss': 'focal', 'neg_ratio': 2.0, 'flip': True, 'rekindle_ignore': False, 'time_bins': 12, 'sigma_t': 1.0, 'aux2d_weight': 1.0, 'name': 'final_2023/cnn3d_st_s2', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 2, 'workers': 2, 'val_batch': 16, 'val_amp': False, 'train_splits': 'train,val,train2,train3', 'no_val': True, 'resume': True, 'no_device_check': False, 'stop_after': 0, 'no_flip': False}
+device check: cuda vs. CPU, full grid, 16 periods per call: max |dp| 3.58e-07
+{"epoch": 1, "train_loss": 33.3982, "train_min": 1.3848}
+{"epoch": 2, "train_loss": 2.1863, "train_min": 1.3658}
+{"epoch": 3, "train_loss": 2.0156, "train_min": 1.3598}
+{"epoch": 4, "train_loss": 1.9458, "train_min": 1.3561}
+{"epoch": 5, "train_loss": 1.8869, "train_min": 1.353}
+{"epoch": 6, "train_loss": 1.8563, "train_min": 1.3554}
+{"epoch": 7, "train_loss": 1.8192, "train_min": 1.3549}
+{"epoch": 8, "train_loss": 1.7919, "train_min": 1.3519}
+{"epoch": 9, "train_loss": 1.7473, "train_min": 1.354}
+{"epoch": 10, "train_loss": 1.7384, "train_min": 1.3504}
+{"epoch": 11, "train_loss": 1.689, "train_min": 1.3571}
+{"epoch": 12, "train_loss": 1.6511, "train_min": 1.3508}
+{"epoch": 13, "train_loss": 1.629, "train_min": 1.35}
+{"epoch": 14, "train_loss": 1.6083, "train_min": 1.3524}
+{"epoch": 15, "train_loss": 1.5748, "train_min": 1.3539}
+{"epoch": 16, "train_loss": 1.569, "train_min": 1.3496}
+{"epoch": 17, "train_loss": 1.5184, "train_min": 1.352}
+{"epoch": 18, "train_loss": 1.527, "train_min": 1.3554}
+{"epoch": 19, "train_loss": 1.4989, "train_min": 1.3469}
+{"epoch": 20, "train_loss": 1.5158, "train_min": 1.3524, "saved": true}
+best mean AP (val) -1.0000; checkpoint models/final_2023/cnn3d_st_s2.pt

@@ -10,7 +10,8 @@ of the 6 h tail), i.e. only information a model would also see. Variants:
                                 of the nucleus' detections in its first hour
 Every nucleus prediction also carries t_h = birth time + ACQ_OFFSET_H - period start [h] (time baseline
 of the space-time model, notes.md 9.4 item 11). Rule-based times for the peaks of a 2D model:
-first_detection_times(); the median lag of the training targets: training_lag_h().
+first_detection_times(); the median lag of the training targets: training_lag_h(); rule and model time
+combined for the space-time model: time_evidence() + combined_times() (notes.md 9.18).
 
 The test split (tiling_design.SPLIT) is not evaluated here: it stays locked until the final comparison.
 
@@ -97,6 +98,45 @@ def first_detection_times(points, data, lag_h=0.0):
         out.append(np.nan if pd.isna(f) else (f - p).total_seconds() / 3600 + ACQ_OFFSET_H - lag_h)
     pts["t_h"] = np.clip(out, 0, PERIOD_H)
     return pts
+
+
+def _last_time(data, i, j, t0, t1, r_px=R_TIME_PX):
+    """Last detection time (UTC) within r_px cells of (i, j) in [t0, t1), or NaT."""
+    t = data.det["time_utc"].values
+    a, b = np.searchsorted(t, np.array([t0.tz_convert(None), t1.tz_convert(None)], dtype="datetime64[ns]"))
+    near = np.hypot(data._i[a:b] - i, data._j[a:b] - j) <= r_px
+    return pd.Timestamp(t[a:b][near][-1], tz="UTC") if near.any() else pd.NaT
+
+
+def time_evidence(points, data, lag_h=0.0, back_h=24):
+    """Per point (period, lat, lon in the TRUE frame; t_h = model time): t_rule, the first-detection
+    time (as first_detection_times, lag removed, NOT clipped), and quiet_h, the hours without a
+    detection within R_TIME_PX cells before that first detection (back to back_h; back_h if none,
+    NaN without a first detection). Input of combined_times()."""
+    pts = points.assign(period=pd.to_datetime(points["period"], utc=True)).copy()
+    i, j = G.latlon_to_ij(pts["lat"].values, pts["lon"].values)
+    if data.georef_fix:
+        i, j = G.true_to_sensor_ij(i, j, pts["period"])
+    tr, quiet = [], []
+    for p, a, b in zip(pts["period"], i, j):
+        f = _first_time(data, a, b, p - pd.Timedelta(hours=1), p + pd.Timedelta(hours=PERIOD_H + TAIL_H))
+        if pd.isna(f):
+            tr.append(np.nan); quiet.append(np.nan); continue
+        tr.append((f - p).total_seconds() / 3600 + ACQ_OFFSET_H - lag_h)
+        last = _last_time(data, a, b, f - pd.Timedelta(hours=back_h), p - pd.Timedelta(hours=1))
+        quiet.append(back_h if pd.isna(last) else (f - last).total_seconds() / 3600)
+    pts["t_rule"], pts["quiet_h"] = tr, quiet
+    return pts
+
+
+def combined_times(ev, quiet_min_h, agree_h=np.inf):
+    """Combined ignition time (notes.md 9.18): the rule time where the place was quiet for at least
+    quiet_min_h before its first detection (a fresh fire) and the rule agrees with the model within
+    agree_h; the model time otherwise. ev from time_evidence() with the model time in t_h. Clipped
+    to [0, PERIOD_H]."""
+    use = ev["t_rule"].notna() & (ev["quiet_h"] >= quiet_min_h) & ((ev["t_rule"] - ev["t_h"]).abs() <= agree_h)
+    return ev.drop(columns=["t_rule", "quiet_h"]).assign(
+        t_h=np.clip(np.where(use, ev["t_rule"], ev["t_h"]), 0, PERIOD_H), rule_used=use.values)
 
 
 def training_lag_h(data, split="train"):

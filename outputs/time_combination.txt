@@ -1,0 +1,81 @@
+ablations_all/cnn3d_st_all_s0: 6,282 points, rule time for 98.7%, quiet >= 6 h for 84.9%
+ablations_all/cnn3d_st_all_s1: 5,014 points, rule time for 99.6%, quiet >= 6 h for 85.0%
+ablations_all/cnn3d_st_all_s2: 6,077 points, rule time for 98.9%, quiet >= 6 h for 85.4%
+  model done
+  quiet>=0h, agree<=infh done
+  quiet>=0h, agree<=3h done
+  quiet>=0h, agree<=2h done
+  quiet>=0h, agree<=1.5h done
+  quiet>=0h, agree<=1h done
+  quiet>=0h, agree<=0.5h done
+  quiet>=1h, agree<=infh done
+  quiet>=1h, agree<=3h done
+  quiet>=1h, agree<=2h done
+  quiet>=1h, agree<=1.5h done
+  quiet>=1h, agree<=1h done
+  quiet>=1h, agree<=0.5h done
+  quiet>=2h, agree<=infh done
+  quiet>=2h, agree<=3h done
+  quiet>=2h, agree<=2h done
+  quiet>=2h, agree<=1.5h done
+  quiet>=2h, agree<=1h done
+  quiet>=2h, agree<=0.5h done
+  quiet>=3h, agree<=infh done
+  quiet>=3h, agree<=3h done
+  quiet>=3h, agree<=2h done
+  quiet>=3h, agree<=1.5h done
+  quiet>=3h, agree<=1h done
+  quiet>=3h, agree<=0.5h done
+  quiet>=6h, agree<=infh done
+  quiet>=6h, agree<=3h done
+  quiet>=6h, agree<=2h done
+  quiet>=6h, agree<=1.5h done
+  quiet>=6h, agree<=1h done
+  quiet>=6h, agree<=0.5h done
+  quiet>=12h, agree<=infh done
+  quiet>=12h, agree<=3h done
+  quiet>=12h, agree<=2h done
+  quiet>=12h, agree<=1.5h done
+  quiet>=12h, agree<=1h done
+  quiet>=12h, agree<=0.5h done
+  quiet>=24h, agree<=infh done
+  quiet>=24h, agree<=3h done
+  quiet>=24h, agree<=2h done
+  quiet>=24h, agree<=1.5h done
+  quiet>=24h, agree<=1h done
+  quiet>=24h, agree<=0.5h done
+
+Objective (time-aware AP, mean of tau 1/2 h and 5/10 km, mean of 3 seeds) by year, best 15 on the mean:
+year                       2015    2016    mean  gain_vs_model  rule_share
+candidate                                                                 
+quiet>=12h, agree<=1.5h  0.5318  0.5075  0.5196         0.0089      0.4906
+quiet>=12h, agree<=1h    0.5327  0.5061  0.5194         0.0087      0.4303
+quiet>=12h, agree<=2h    0.5318  0.5060  0.5189         0.0081      0.5233
+quiet>=6h, agree<=1.5h   0.5303  0.5067  0.5185         0.0077      0.5041
+quiet>=2h, agree<=1.5h   0.5303  0.5067  0.5185         0.0077      0.5114
+quiet>=0h, agree<=1.5h   0.5303  0.5067  0.5185         0.0077      0.5153
+quiet>=3h, agree<=1.5h   0.5303  0.5067  0.5185         0.0077      0.5095
+quiet>=1h, agree<=1.5h   0.5303  0.5067  0.5185         0.0077      0.5141
+quiet>=2h, agree<=1h     0.5312  0.5054  0.5183         0.0075      0.4488
+quiet>=6h, agree<=1h     0.5312  0.5054  0.5183         0.0075      0.4429
+quiet>=0h, agree<=1h     0.5312  0.5054  0.5183         0.0075      0.4506
+quiet>=3h, agree<=1h     0.5312  0.5054  0.5183         0.0075      0.4473
+quiet>=1h, agree<=1h     0.5312  0.5054  0.5183         0.0075      0.4506
+quiet>=2h, agree<=2h     0.5303  0.5059  0.5181         0.0074      0.5462
+quiet>=3h, agree<=2h     0.5303  0.5056  0.5180         0.0072      0.5437
+
+model time: {2015: 0.5217, 2016: 0.4998}
+chosen on 2015: quiet>=24h, agree<=1h; on 2016: 0.5032 vs model 0.4998 (+0.0034)
+chosen on 2016: quiet>=12h, agree<=1.5h; on 2015: 0.5318 vs model 0.5217 (+0.0101)
+
+FINAL CHOICE: quiet>=12h, agree<=1.5h
+
+Pooled validation 2015-2016, mean of 3 seeds:
+                                      median |dt|  median dt  <=1 h  <=2 h  isolated=True  in_pair=True  already_burning=True  rekindle=True  AP tau=1  AP tau=2  AP tau=3
+time                              k                                                                                                                                       
+model                             5         0.603      0.087  0.663  0.827          0.354         0.995                 1.371          1.163     0.422     0.537     0.582
+                                  10        0.625      0.083  0.646  0.805          0.371         1.337                 1.436          1.268     0.464     0.595     0.649
+rule wherever detected            5         0.444     -0.128  0.667  0.789          0.250         1.608                 2.281          1.647     0.415     0.506     0.554
+                                  10        0.475     -0.139  0.656  0.777          0.250         1.814                 2.378          1.589     0.464     0.564     0.618
+combined: quiet>=12h, agree<=1.5h 5         0.422     -0.027  0.681  0.818          0.253         1.006                 1.461          1.189     0.437     0.535     0.584
+                                  10        0.453     -0.028  0.667  0.800          0.261         1.364                 1.501          1.327     0.485     0.594     0.651

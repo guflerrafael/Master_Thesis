@@ -1,0 +1,26 @@
+host 7c09c6d199bd; device cuda; train splits train,val,train2,train3; parameters 63,073; train crops per epoch 9,426 (3,142 positive); validation periods 844; config {'step_agg': 4, 'channels': ['frp', 'confidence', 'detected', 'period', 'time', 'pt', 'persistent'], 'history_h': 6, 'tail_h': 6, 'arch': 'cnn3d', 'layers': 2, 'hidden': 32, 'kernel': 3, 'readout': 'last', 'crop': 32, 'sigma': 1.0, 'ignore_r': 2.0, 'min_target_ha': None, 'loss': 'focal', 'neg_ratio': 2.0, 'flip': True, 'rekindle_ignore': False, 'time_bins': 0, 'sigma_t': 1.0, 'aux2d_weight': 1.0, 'name': 'final_2023/cnn3d_final_s2', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 2, 'workers': 2, 'val_batch': 16, 'val_amp': False, 'train_splits': 'train,val,train2,train3', 'no_val': True, 'resume': True, 'no_device_check': False, 'stop_after': 0, 'no_flip': False}
+device check: cuda vs. CPU, full grid, 16 periods per call: max |dp| 6.56e-07
+{"epoch": 1, "train_loss": 1.718, "train_min": 0.7582}
+{"epoch": 2, "train_loss": 0.8546, "train_min": 0.7487}
+{"epoch": 3, "train_loss": 0.7911, "train_min": 0.7455}
+{"epoch": 4, "train_loss": 0.7792, "train_min": 0.7421}
+{"epoch": 5, "train_loss": 0.7737, "train_min": 0.7568}
+{"epoch": 6, "train_loss": 0.7255, "train_min": 0.743}
+{"epoch": 7, "train_loss": 0.7264, "train_min": 0.7369}
+{"epoch": 8, "train_loss": 0.7166, "train_min": 0.735}
+{"epoch": 9, "train_loss": 0.6869, "train_min": 0.7531}
+{"epoch": 10, "train_loss": 0.6745, "train_min": 0.7528}
+host Rafaels-MacBook-Pro.local; device mps; train splits train,val,train2,train3; parameters 63,073; train crops per epoch 9,426 (3,142 positive); validation periods 844; config {'step_agg': 4, 'channels': ['frp', 'confidence', 'detected', 'period', 'time', 'pt', 'persistent'], 'history_h': 6, 'tail_h': 6, 'arch': 'cnn3d', 'layers': 2, 'hidden': 32, 'kernel': 3, 'readout': 'last', 'crop': 32, 'sigma': 1.0, 'ignore_r': 2.0, 'min_target_ha': None, 'loss': 'focal', 'neg_ratio': 2.0, 'flip': True, 'rekindle_ignore': False, 'time_bins': 0, 'sigma_t': 1.0, 'aux2d_weight': 1.0, 'name': 'final_2023/cnn3d_final_s2', 'epochs': 20, 'batch': 16, 'lr': 0.001, 'val_every': 2, 'max_batches': 0, 'val_periods': 0, 'seed': 2, 'workers': 0, 'val_batch': 16, 'val_amp': False, 'train_splits': 'train,val,train2,train3', 'no_val': True, 'resume': True, 'no_device_check': False, 'stop_after': 0, 'no_flip': False}
+resumed from models/final_2023/cnn3d_final_s2_last.pt after epoch 10 (made on 7c09c6d199bd, cuda); best so far -1.0000
+device check: mps vs. CPU, full grid, 16 periods per call: max |dp| 1.01e-06
+{"epoch": 11, "train_loss": 0.6796, "train_min": 2.8885}
+{"epoch": 12, "train_loss": 0.6718, "train_min": 2.8813}
+{"epoch": 13, "train_loss": 0.6485, "train_min": 2.8878}
+{"epoch": 14, "train_loss": 0.6365, "train_min": 2.9007}
+{"epoch": 15, "train_loss": 0.6408, "train_min": 2.8849}
+{"epoch": 16, "train_loss": 0.621, "train_min": 2.8636}
+{"epoch": 17, "train_loss": 0.6158, "train_min": 2.8989}
+{"epoch": 18, "train_loss": 0.6266, "train_min": 2.8936}
+{"epoch": 19, "train_loss": 0.6131, "train_min": 2.9036}
+{"epoch": 20, "train_loss": 0.6062, "train_min": 2.9245, "saved": true}
+best mean AP (val) -1.0000; checkpoint models/final_2023/cnn3d_final_s2.pt

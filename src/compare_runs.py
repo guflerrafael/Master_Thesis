@@ -12,6 +12,8 @@ Space-time runs are scored with their default decoding (D1, 3D peaks), place onl
 Run from the repository root (groups or differences without finished runs are skipped):
   .venv/bin/python src/compare_runs.py > outputs/compare_runs.txt
   .venv/bin/python src/compare_runs.py --group a=ablations_x/run_s* --group b=... --diff a-b
+Intervals on the test split, after the single test of evaluate_test.py (notes.md 9.20; no choices are
+made from it): --split test --confirm-test.
 """
 import argparse
 import glob
@@ -43,9 +45,9 @@ def runs_of(pattern):
     return out
 
 
-def points(name, data, device, periods):
+def points(name, data, device, periods, split="val"):
     ckpt = ROOT / "models" / f"{name}.pt"
-    f = CACHE / f"{name.replace('/', '__')}.parquet"
+    f = CACHE / f"{name.replace('/', '__')}{'' if split == 'val' else '_' + split}.parquet"
     if f.exists() and f.stat().st_mtime > ckpt.stat().st_mtime:
         return pd.read_parquet(f)
     model, cfg, _ = load_model(name, device)
@@ -56,7 +58,10 @@ def points(name, data, device, periods):
 
 
 def history_stats(name):
-    h = pd.read_csv(ROOT / "outputs" / f"{name}_history.csv").dropna(subset=["AP@5"])
+    h = pd.read_csv(ROOT / "outputs" / f"{name}_history.csv")
+    if "AP@5" not in h or h["AP@5"].isna().all():          # final runs (--no-val): last epoch, no history
+        return {"best epoch": int(h["epoch"].max()), "late AP@5": np.nan, "late AP@10": np.nan}
+    h = h.dropna(subset=["AP@5"])
     m = (h["AP@5"] + h["AP@10"]) / 2
     late = h[h["epoch"] >= 16]
     return {"best epoch": int(h.loc[m.idxmax(), "epoch"]), "late AP@5": late["AP@5"].mean(), "late AP@10": late["AP@10"].mean()}
@@ -87,15 +92,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--group", action="append", help="label=pattern under models/ (glob), repeatable")
     ap.add_argument("--diff", action="append", help="A-B of two group labels, repeatable")
+    ap.add_argument("--split", default="val", choices=["val", "test"])
+    ap.add_argument("--confirm-test", action="store_true", help="needed with --split test")
     args = ap.parse_args()
+    assert args.split == "val" or args.confirm_test, "--split test needs --confirm-test (after the single test, 9.20)"
+    split = args.split
     groups = dict(g.split("=", 1) for g in (args.group or GROUPS_DEFAULT))
     diffs = args.diff or DIFFS_DEFAULT
     pd.set_option("display.width", 250); pd.set_option("display.max_columns", 40)
 
     data = FireData()
     device = get_device()
-    per_all = data.periods.loc[data.periods["split"] == "val", "period"]
-    per_pred = data.periods.loc[(data.periods["split"] == "val") & (data.periods["n_det"] > 0), "period"]
+    per_all = data.periods.loc[data.periods["split"] == split, "period"]
+    per_pred = data.periods.loc[(data.periods["split"] == split) & (data.periods["n_det"] > 0), "period"]
     periods = sorted(set(pd.to_datetime(per_all, utc=True)))
     rng = np.random.default_rng(0)
     W = np.stack([np.bincount(rng.integers(0, len(periods), len(periods)), minlength=len(periods)) for _ in range(B)])
@@ -105,10 +114,10 @@ def main():
         names = runs_of(pattern)
         print(f"{label}: {len(names)} finished runs ({pattern})", flush=True)
         for name in names:
-            pts = points(name, data, device, per_pred)
+            pts = points(name, data, device, per_pred, split)
             row = {"config": label, "run": name.split("/")[-1], **history_stats(name)}
             for k in (5, 10):
-                res, _, _ = evaluate(pts, data, "val", k, groups=GROUPS)
+                res, _, _ = evaluate(pts, data, split, k, groups=GROUPS)
                 row[f"AP@{k}"], row[f"recall@{k}"] = res["AP"], res["recall (all preds)"]
                 if k == 10:
                     row["in pair@10"] = res["recall | in_pair=True"]
@@ -121,7 +130,7 @@ def main():
     if not rows:
         return
     tab = pd.DataFrame(rows).set_index(["config", "run"])
-    print("\nPer run (validation 2015-2016, current evaluation; late = mean of the validated epochs 16-20 in the history):")
+    print(f"\nPer run ({split}, current evaluation; late = mean of the validated epochs 16-20 in the history):")
     print(tab.round(3).to_string())
     num = tab.drop(columns="best epoch")
     agg = num.groupby(level=0, sort=False).agg(["mean", "min", "max"])
@@ -132,7 +141,7 @@ def main():
                  for c in num.columns]
         print(f"  {label} ({n} seeds): " + "; ".join(cells))
 
-    print(f"\nDifferences of the seed means, 95 % period bootstrap ({B} resamples of the {len(periods)} validation periods):")
+    print(f"\nDifferences of the seed means, 95 % period bootstrap ({B} resamples of the {len(periods)} {split} periods):")
     for d in diffs:
         a, b_ = d.split("-")
         if (a, 5) not in boots or (b_, 5) not in boots:

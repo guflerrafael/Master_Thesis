@@ -1,0 +1,4 @@
+1 runs (1 experiments × 1 seeds) -> models/final_2023/, outputs/final_2023/
+[1/1] final_2023/cnn3d_final_s2: 3D-CNN candidate: no recurrence + 2 negatives | /Users/rafaelgufler/Documents/master_thesis/src/train.py --name final_2023/cnn3d_final_s2 --seed 2 --resume --arch cnn3d --neg-ratio 2 --train-splits train,val,train2,train3 --no-val
+    resuming after the last finished epoch (models/final_2023/cnn3d_final_s2_last.pt)
+    ok in 29.0 min (total 29 min)
