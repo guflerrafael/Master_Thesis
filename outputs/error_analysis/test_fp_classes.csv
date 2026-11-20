@@ -1,0 +1,391 @@
+method,k,seed,at,cls,n,share
+cnn3d_st,5,0,best F1,duplicate,1,0.012195121951219513
+cnn3d_st,5,0,best F1,rekindle record,1,0.012195121951219513
+cnn3d_st,5,0,best F1,earlier fire >= 10 ha,30,0.36585365853658536
+cnn3d_st,5,0,best F1,fire < 10 ha,2,0.024390243902439025
+cnn3d_st,5,0,best F1,fire in the tail,3,0.036585365853658534
+cnn3d_st,5,0,best F1,border cell,0,0.0
+cnn3d_st,5,0,best F1,persistent cell,2,0.024390243902439025
+cnn3d_st,5,0,best F1,no ICNF evidence,43,0.524390243902439
+cnn3d_st,5,0,all points,duplicate,81,0.02654867256637168
+cnn3d_st,5,0,all points,rekindle record,31,0.010160603080957063
+cnn3d_st,5,0,all points,earlier fire >= 10 ha,425,0.13929859062602426
+cnn3d_st,5,0,all points,fire < 10 ha,243,0.07964601769911504
+cnn3d_st,5,0,all points,fire in the tail,52,0.017043592264831202
+cnn3d_st,5,0,all points,border cell,103,0.033759423139954114
+cnn3d_st,5,0,all points,persistent cell,113,0.037037037037037035
+cnn3d_st,5,0,all points,no ICNF evidence,2003,0.6565060635857096
+cnn3d_st,5,0,best F1,duplicate: median hours to the found point,1,4.595411792943748
+cnn3d_st,5,1,best F1,duplicate,3,0.03488372093023256
+cnn3d_st,5,1,best F1,rekindle record,0,0.0
+cnn3d_st,5,1,best F1,earlier fire >= 10 ha,31,0.36046511627906974
+cnn3d_st,5,1,best F1,fire < 10 ha,2,0.023255813953488372
+cnn3d_st,5,1,best F1,fire in the tail,2,0.023255813953488372
+cnn3d_st,5,1,best F1,border cell,3,0.03488372093023256
+cnn3d_st,5,1,best F1,persistent cell,2,0.023255813953488372
+cnn3d_st,5,1,best F1,no ICNF evidence,43,0.5
+cnn3d_st,5,1,all points,duplicate,91,0.0329352153456388
+cnn3d_st,5,1,all points,rekindle record,34,0.012305465074194716
+cnn3d_st,5,1,all points,earlier fire >= 10 ha,386,0.1397032211364459
+cnn3d_st,5,1,all points,fire < 10 ha,205,0.07419471588852697
+cnn3d_st,5,1,all points,fire in the tail,56,0.020267824828085413
+cnn3d_st,5,1,all points,border cell,100,0.036192544335866814
+cnn3d_st,5,1,all points,persistent cell,104,0.03764024610930149
+cnn3d_st,5,1,all points,no ICNF evidence,1787,0.6467607672819399
+cnn3d_st,5,1,best F1,duplicate: median hours to the found point,3,5.13179881232792
+cnn3d_st,5,2,best F1,duplicate,2,0.02857142857142857
+cnn3d_st,5,2,best F1,rekindle record,1,0.014285714285714285
+cnn3d_st,5,2,best F1,earlier fire >= 10 ha,21,0.3
+cnn3d_st,5,2,best F1,fire < 10 ha,0,0.0
+cnn3d_st,5,2,best F1,fire in the tail,1,0.014285714285714285
+cnn3d_st,5,2,best F1,border cell,2,0.02857142857142857
+cnn3d_st,5,2,best F1,persistent cell,1,0.014285714285714285
+cnn3d_st,5,2,best F1,no ICNF evidence,42,0.6
+cnn3d_st,5,2,all points,duplicate,118,0.04174036080650867
+cnn3d_st,5,2,all points,rekindle record,37,0.013088079235939158
+cnn3d_st,5,2,all points,earlier fire >= 10 ha,375,0.13264945171559958
+cnn3d_st,5,2,all points,fire < 10 ha,210,0.07428369296073577
+cnn3d_st,5,2,all points,fire in the tail,53,0.01874778917580474
+cnn3d_st,5,2,all points,border cell,79,0.02794481782808631
+cnn3d_st,5,2,all points,persistent cell,98,0.034665723381676686
+cnn3d_st,5,2,all points,no ICNF evidence,1857,0.6568800848956491
+cnn3d_st,5,2,best F1,duplicate: median hours to the found point,2,3.5219853372340375
+cnn3d_st,10,0,best F1,duplicate,0,0.0
+cnn3d_st,10,0,best F1,rekindle record,5,0.0684931506849315
+cnn3d_st,10,0,best F1,earlier fire >= 10 ha,26,0.3561643835616438
+cnn3d_st,10,0,best F1,fire < 10 ha,3,0.0410958904109589
+cnn3d_st,10,0,best F1,fire in the tail,1,0.0136986301369863
+cnn3d_st,10,0,best F1,border cell,0,0.0
+cnn3d_st,10,0,best F1,persistent cell,2,0.0273972602739726
+cnn3d_st,10,0,best F1,no ICNF evidence,36,0.4931506849315068
+cnn3d_st,10,0,all points,duplicate,124,0.04158283031522468
+cnn3d_st,10,0,all points,rekindle record,96,0.03219315895372234
+cnn3d_st,10,0,all points,earlier fire >= 10 ha,586,0.19651240778001342
+cnn3d_st,10,0,all points,fire < 10 ha,314,0.10529845741113347
+cnn3d_st,10,0,all points,fire in the tail,38,0.012743125419181758
+cnn3d_st,10,0,all points,border cell,87,0.029175050301810865
+cnn3d_st,10,0,all points,persistent cell,63,0.02112676056338028
+cnn3d_st,10,0,all points,no ICNF evidence,1674,0.5613682092555332
+cnn3d_st,10,0,best F1,duplicate: median hours to the found point,0,
+cnn3d_st,10,1,best F1,duplicate,3,0.039473684210526314
+cnn3d_st,10,1,best F1,rekindle record,2,0.02631578947368421
+cnn3d_st,10,1,best F1,earlier fire >= 10 ha,30,0.39473684210526316
+cnn3d_st,10,1,best F1,fire < 10 ha,4,0.05263157894736842
+cnn3d_st,10,1,best F1,fire in the tail,0,0.0
+cnn3d_st,10,1,best F1,border cell,3,0.039473684210526314
+cnn3d_st,10,1,best F1,persistent cell,2,0.02631578947368421
+cnn3d_st,10,1,best F1,no ICNF evidence,32,0.42105263157894735
+cnn3d_st,10,1,all points,duplicate,118,0.0437037037037037
+cnn3d_st,10,1,all points,rekindle record,85,0.03148148148148148
+cnn3d_st,10,1,all points,earlier fire >= 10 ha,536,0.1985185185185185
+cnn3d_st,10,1,all points,fire < 10 ha,257,0.09518518518518519
+cnn3d_st,10,1,all points,fire in the tail,42,0.015555555555555555
+cnn3d_st,10,1,all points,border cell,90,0.03333333333333333
+cnn3d_st,10,1,all points,persistent cell,77,0.02851851851851852
+cnn3d_st,10,1,all points,no ICNF evidence,1495,0.5537037037037037
+cnn3d_st,10,1,best F1,duplicate: median hours to the found point,3,3.0198669736550388
+cnn3d_st,10,2,best F1,duplicate,2,0.03333333333333333
+cnn3d_st,10,2,best F1,rekindle record,4,0.06666666666666667
+cnn3d_st,10,2,best F1,earlier fire >= 10 ha,23,0.38333333333333336
+cnn3d_st,10,2,best F1,fire < 10 ha,1,0.016666666666666666
+cnn3d_st,10,2,best F1,fire in the tail,0,0.0
+cnn3d_st,10,2,best F1,border cell,2,0.03333333333333333
+cnn3d_st,10,2,best F1,persistent cell,1,0.016666666666666666
+cnn3d_st,10,2,best F1,no ICNF evidence,27,0.45
+cnn3d_st,10,2,all points,duplicate,157,0.05707015630679753
+cnn3d_st,10,2,all points,rekindle record,83,0.030170846964740095
+cnn3d_st,10,2,all points,earlier fire >= 10 ha,533,0.19374772809887314
+cnn3d_st,10,2,all points,fire < 10 ha,271,0.0985096328607779
+cnn3d_st,10,2,all points,fire in the tail,41,0.014903671392221011
+cnn3d_st,10,2,all points,border cell,58,0.021083242457288258
+cnn3d_st,10,2,all points,persistent cell,69,0.025081788440567066
+cnn3d_st,10,2,all points,no ICNF evidence,1539,0.559432933478735
+cnn3d_st,10,2,best F1,duplicate: median hours to the found point,2,2.611183048980146
+cnn3d_final,5,0,best F1,duplicate,0,0.0
+cnn3d_final,5,0,best F1,rekindle record,1,0.010869565217391304
+cnn3d_final,5,0,best F1,earlier fire >= 10 ha,35,0.3804347826086957
+cnn3d_final,5,0,best F1,fire < 10 ha,0,0.0
+cnn3d_final,5,0,best F1,fire in the tail,2,0.021739130434782608
+cnn3d_final,5,0,best F1,border cell,1,0.010869565217391304
+cnn3d_final,5,0,best F1,persistent cell,4,0.043478260869565216
+cnn3d_final,5,0,best F1,no ICNF evidence,49,0.532608695652174
+cnn3d_final,5,0,all points,duplicate,0,0.0
+cnn3d_final,5,0,all points,rekindle record,23,0.010854176498348278
+cnn3d_final,5,0,all points,earlier fire >= 10 ha,313,0.14771118452100046
+cnn3d_final,5,0,all points,fire < 10 ha,163,0.07692307692307693
+cnn3d_final,5,0,all points,fire in the tail,41,0.019348749410099102
+cnn3d_final,5,0,all points,border cell,42,0.019820670127418595
+cnn3d_final,5,0,all points,persistent cell,75,0.03539405379896177
+cnn3d_final,5,0,all points,no ICNF evidence,1462,0.6899480887210948
+cnn3d_final,5,1,best F1,duplicate,0,0.0
+cnn3d_final,5,1,best F1,rekindle record,1,0.009345794392523364
+cnn3d_final,5,1,best F1,earlier fire >= 10 ha,34,0.3177570093457944
+cnn3d_final,5,1,best F1,fire < 10 ha,6,0.056074766355140186
+cnn3d_final,5,1,best F1,fire in the tail,2,0.018691588785046728
+cnn3d_final,5,1,best F1,border cell,0,0.0
+cnn3d_final,5,1,best F1,persistent cell,2,0.018691588785046728
+cnn3d_final,5,1,best F1,no ICNF evidence,62,0.5794392523364486
+cnn3d_final,5,1,all points,duplicate,0,0.0
+cnn3d_final,5,1,all points,rekindle record,23,0.011557788944723618
+cnn3d_final,5,1,all points,earlier fire >= 10 ha,263,0.1321608040201005
+cnn3d_final,5,1,all points,fire < 10 ha,165,0.0829145728643216
+cnn3d_final,5,1,all points,fire in the tail,37,0.0185929648241206
+cnn3d_final,5,1,all points,border cell,85,0.04271356783919598
+cnn3d_final,5,1,all points,persistent cell,57,0.02864321608040201
+cnn3d_final,5,1,all points,no ICNF evidence,1360,0.6834170854271356
+cnn3d_final,5,2,best F1,duplicate,0,0.0
+cnn3d_final,5,2,best F1,rekindle record,1,0.009174311926605505
+cnn3d_final,5,2,best F1,earlier fire >= 10 ha,37,0.3394495412844037
+cnn3d_final,5,2,best F1,fire < 10 ha,2,0.01834862385321101
+cnn3d_final,5,2,best F1,fire in the tail,1,0.009174311926605505
+cnn3d_final,5,2,best F1,border cell,5,0.045871559633027525
+cnn3d_final,5,2,best F1,persistent cell,3,0.027522935779816515
+cnn3d_final,5,2,best F1,no ICNF evidence,60,0.5504587155963303
+cnn3d_final,5,2,all points,duplicate,0,0.0
+cnn3d_final,5,2,all points,rekindle record,29,0.013488372093023256
+cnn3d_final,5,2,all points,earlier fire >= 10 ha,280,0.13023255813953488
+cnn3d_final,5,2,all points,fire < 10 ha,167,0.07767441860465116
+cnn3d_final,5,2,all points,fire in the tail,53,0.024651162790697675
+cnn3d_final,5,2,all points,border cell,81,0.037674418604651164
+cnn3d_final,5,2,all points,persistent cell,71,0.03302325581395349
+cnn3d_final,5,2,all points,no ICNF evidence,1469,0.6832558139534883
+cnn3d_final,10,0,best F1,duplicate,0,0.0
+cnn3d_final,10,0,best F1,rekindle record,6,0.07058823529411765
+cnn3d_final,10,0,best F1,earlier fire >= 10 ha,34,0.4
+cnn3d_final,10,0,best F1,fire < 10 ha,2,0.023529411764705882
+cnn3d_final,10,0,best F1,fire in the tail,0,0.0
+cnn3d_final,10,0,best F1,border cell,1,0.011764705882352941
+cnn3d_final,10,0,best F1,persistent cell,4,0.047058823529411764
+cnn3d_final,10,0,best F1,no ICNF evidence,38,0.4470588235294118
+cnn3d_final,10,0,all points,duplicate,5,0.0023957834211787254
+cnn3d_final,10,0,all points,rekindle record,73,0.03497843794920939
+cnn3d_final,10,0,all points,earlier fire >= 10 ha,425,0.20364159080019167
+cnn3d_final,10,0,all points,fire < 10 ha,213,0.1020603737422137
+cnn3d_final,10,0,all points,fire in the tail,30,0.014374700527072353
+cnn3d_final,10,0,all points,border cell,37,0.01772879731672257
+cnn3d_final,10,0,all points,persistent cell,55,0.02635361763296598
+cnn3d_final,10,0,all points,no ICNF evidence,1249,0.5984666986104457
+cnn3d_final,10,1,best F1,duplicate,0,0.0
+cnn3d_final,10,1,best F1,rekindle record,5,0.05102040816326531
+cnn3d_final,10,1,best F1,earlier fire >= 10 ha,36,0.3673469387755102
+cnn3d_final,10,1,best F1,fire < 10 ha,8,0.08163265306122448
+cnn3d_final,10,1,best F1,fire in the tail,0,0.0
+cnn3d_final,10,1,best F1,border cell,0,0.0
+cnn3d_final,10,1,best F1,persistent cell,2,0.02040816326530612
+cnn3d_final,10,1,best F1,no ICNF evidence,47,0.47959183673469385
+cnn3d_final,10,1,all points,duplicate,4,0.0020387359836901123
+cnn3d_final,10,1,all points,rekindle record,70,0.03567787971457696
+cnn3d_final,10,1,all points,earlier fire >= 10 ha,381,0.19418960244648317
+cnn3d_final,10,1,all points,fire < 10 ha,207,0.10550458715596331
+cnn3d_final,10,1,all points,fire in the tail,30,0.01529051987767584
+cnn3d_final,10,1,all points,border cell,76,0.03873598369011213
+cnn3d_final,10,1,all points,persistent cell,42,0.021406727828746176
+cnn3d_final,10,1,all points,no ICNF evidence,1152,0.5871559633027523
+cnn3d_final,10,2,best F1,duplicate,0,0.0
+cnn3d_final,10,2,best F1,rekindle record,5,0.04950495049504951
+cnn3d_final,10,2,best F1,earlier fire >= 10 ha,42,0.4158415841584158
+cnn3d_final,10,2,best F1,fire < 10 ha,5,0.04950495049504951
+cnn3d_final,10,2,best F1,fire in the tail,0,0.0
+cnn3d_final,10,2,best F1,border cell,4,0.039603960396039604
+cnn3d_final,10,2,best F1,persistent cell,2,0.019801980198019802
+cnn3d_final,10,2,best F1,no ICNF evidence,43,0.42574257425742573
+cnn3d_final,10,2,all points,duplicate,6,0.002823529411764706
+cnn3d_final,10,2,all points,rekindle record,71,0.033411764705882356
+cnn3d_final,10,2,all points,earlier fire >= 10 ha,396,0.18635294117647058
+cnn3d_final,10,2,all points,fire < 10 ha,215,0.1011764705882353
+cnn3d_final,10,2,all points,fire in the tail,42,0.01976470588235294
+cnn3d_final,10,2,all points,border cell,71,0.033411764705882356
+cnn3d_final,10,2,all points,persistent cell,53,0.024941176470588234
+cnn3d_final,10,2,all points,no ICNF evidence,1271,0.5981176470588235
+cnn3d_final_2016,5,0,best F1,duplicate,0,0.0
+cnn3d_final_2016,5,0,best F1,rekindle record,1,0.010526315789473684
+cnn3d_final_2016,5,0,best F1,earlier fire >= 10 ha,33,0.3473684210526316
+cnn3d_final_2016,5,0,best F1,fire < 10 ha,3,0.031578947368421054
+cnn3d_final_2016,5,0,best F1,fire in the tail,2,0.021052631578947368
+cnn3d_final_2016,5,0,best F1,border cell,0,0.0
+cnn3d_final_2016,5,0,best F1,persistent cell,3,0.031578947368421054
+cnn3d_final_2016,5,0,best F1,no ICNF evidence,53,0.5578947368421052
+cnn3d_final_2016,5,0,all points,duplicate,0,0.0
+cnn3d_final_2016,5,0,all points,rekindle record,23,0.011170471102476931
+cnn3d_final_2016,5,0,all points,earlier fire >= 10 ha,230,0.11170471102476931
+cnn3d_final_2016,5,0,all points,fire < 10 ha,168,0.08159300631374454
+cnn3d_final_2016,5,0,all points,fire in the tail,40,0.01942690626517727
+cnn3d_final_2016,5,0,all points,border cell,73,0.035454103933948516
+cnn3d_final_2016,5,0,all points,persistent cell,65,0.03156872268091306
+cnn3d_final_2016,5,0,all points,no ICNF evidence,1460,0.7090820786789703
+cnn3d_final_2016,5,1,best F1,duplicate,0,0.0
+cnn3d_final_2016,5,1,best F1,rekindle record,1,0.007352941176470588
+cnn3d_final_2016,5,1,best F1,earlier fire >= 10 ha,39,0.2867647058823529
+cnn3d_final_2016,5,1,best F1,fire < 10 ha,4,0.029411764705882353
+cnn3d_final_2016,5,1,best F1,fire in the tail,2,0.014705882352941176
+cnn3d_final_2016,5,1,best F1,border cell,2,0.014705882352941176
+cnn3d_final_2016,5,1,best F1,persistent cell,14,0.10294117647058823
+cnn3d_final_2016,5,1,best F1,no ICNF evidence,74,0.5441176470588235
+cnn3d_final_2016,5,1,all points,duplicate,2,0.0009501187648456057
+cnn3d_final_2016,5,1,all points,rekindle record,24,0.01140142517814727
+cnn3d_final_2016,5,1,all points,earlier fire >= 10 ha,267,0.12684085510688836
+cnn3d_final_2016,5,1,all points,fire < 10 ha,170,0.08076009501187649
+cnn3d_final_2016,5,1,all points,fire in the tail,40,0.019002375296912115
+cnn3d_final_2016,5,1,all points,border cell,95,0.04513064133016627
+cnn3d_final_2016,5,1,all points,persistent cell,84,0.039904988123515436
+cnn3d_final_2016,5,1,all points,no ICNF evidence,1423,0.6760095011876485
+cnn3d_final_2016,5,2,best F1,duplicate,0,0.0
+cnn3d_final_2016,5,2,best F1,rekindle record,1,0.01
+cnn3d_final_2016,5,2,best F1,earlier fire >= 10 ha,36,0.36
+cnn3d_final_2016,5,2,best F1,fire < 10 ha,2,0.02
+cnn3d_final_2016,5,2,best F1,fire in the tail,2,0.02
+cnn3d_final_2016,5,2,best F1,border cell,4,0.04
+cnn3d_final_2016,5,2,best F1,persistent cell,1,0.01
+cnn3d_final_2016,5,2,best F1,no ICNF evidence,54,0.54
+cnn3d_final_2016,5,2,all points,duplicate,0,0.0
+cnn3d_final_2016,5,2,all points,rekindle record,25,0.012278978388998035
+cnn3d_final_2016,5,2,all points,earlier fire >= 10 ha,271,0.13310412573673872
+cnn3d_final_2016,5,2,all points,fire < 10 ha,171,0.08398821218074656
+cnn3d_final_2016,5,2,all points,fire in the tail,34,0.01669941060903733
+cnn3d_final_2016,5,2,all points,border cell,83,0.04076620825147348
+cnn3d_final_2016,5,2,all points,persistent cell,70,0.0343811394891945
+cnn3d_final_2016,5,2,all points,no ICNF evidence,1382,0.6787819253438114
+cnn3d_final_2016,10,0,best F1,duplicate,0,0.0
+cnn3d_final_2016,10,0,best F1,rekindle record,6,0.06818181818181818
+cnn3d_final_2016,10,0,best F1,earlier fire >= 10 ha,33,0.375
+cnn3d_final_2016,10,0,best F1,fire < 10 ha,5,0.056818181818181816
+cnn3d_final_2016,10,0,best F1,fire in the tail,0,0.0
+cnn3d_final_2016,10,0,best F1,border cell,0,0.0
+cnn3d_final_2016,10,0,best F1,persistent cell,3,0.03409090909090909
+cnn3d_final_2016,10,0,best F1,no ICNF evidence,41,0.4659090909090909
+cnn3d_final_2016,10,0,all points,duplicate,8,0.0039447731755424065
+cnn3d_final_2016,10,0,all points,rekindle record,65,0.03205128205128205
+cnn3d_final_2016,10,0,all points,earlier fire >= 10 ha,334,0.16469428007889547
+cnn3d_final_2016,10,0,all points,fire < 10 ha,216,0.10650887573964497
+cnn3d_final_2016,10,0,all points,fire in the tail,32,0.015779092702169626
+cnn3d_final_2016,10,0,all points,border cell,65,0.03205128205128205
+cnn3d_final_2016,10,0,all points,persistent cell,45,0.022189349112426034
+cnn3d_final_2016,10,0,all points,no ICNF evidence,1263,0.6227810650887574
+cnn3d_final_2016,10,1,best F1,duplicate,1,0.007751937984496124
+cnn3d_final_2016,10,1,best F1,rekindle record,4,0.031007751937984496
+cnn3d_final_2016,10,1,best F1,earlier fire >= 10 ha,46,0.35658914728682173
+cnn3d_final_2016,10,1,best F1,fire < 10 ha,7,0.05426356589147287
+cnn3d_final_2016,10,1,best F1,fire in the tail,1,0.007751937984496124
+cnn3d_final_2016,10,1,best F1,border cell,2,0.015503875968992248
+cnn3d_final_2016,10,1,best F1,persistent cell,11,0.08527131782945736
+cnn3d_final_2016,10,1,best F1,no ICNF evidence,57,0.4418604651162791
+cnn3d_final_2016,10,1,all points,duplicate,9,0.004347826086956522
+cnn3d_final_2016,10,1,all points,rekindle record,69,0.03333333333333333
+cnn3d_final_2016,10,1,all points,earlier fire >= 10 ha,384,0.1855072463768116
+cnn3d_final_2016,10,1,all points,fire < 10 ha,217,0.10483091787439613
+cnn3d_final_2016,10,1,all points,fire in the tail,36,0.017391304347826087
+cnn3d_final_2016,10,1,all points,border cell,84,0.04057971014492753
+cnn3d_final_2016,10,1,all points,persistent cell,66,0.03188405797101449
+cnn3d_final_2016,10,1,all points,no ICNF evidence,1205,0.5821256038647343
+cnn3d_final_2016,10,2,best F1,duplicate,0,0.0
+cnn3d_final_2016,10,2,best F1,rekindle record,4,0.043010752688172046
+cnn3d_final_2016,10,2,best F1,earlier fire >= 10 ha,39,0.41935483870967744
+cnn3d_final_2016,10,2,best F1,fire < 10 ha,3,0.03225806451612903
+cnn3d_final_2016,10,2,best F1,fire in the tail,0,0.0
+cnn3d_final_2016,10,2,best F1,border cell,3,0.03225806451612903
+cnn3d_final_2016,10,2,best F1,persistent cell,1,0.010752688172043012
+cnn3d_final_2016,10,2,best F1,no ICNF evidence,43,0.46236559139784944
+cnn3d_final_2016,10,2,all points,duplicate,6,0.0029925187032418953
+cnn3d_final_2016,10,2,all points,rekindle record,68,0.03391521197007481
+cnn3d_final_2016,10,2,all points,earlier fire >= 10 ha,392,0.19551122194513715
+cnn3d_final_2016,10,2,all points,fire < 10 ha,213,0.10623441396508729
+cnn3d_final_2016,10,2,all points,fire in the tail,26,0.012967581047381545
+cnn3d_final_2016,10,2,all points,border cell,76,0.03790523690773067
+cnn3d_final_2016,10,2,all points,persistent cell,51,0.02543640897755611
+cnn3d_final_2016,10,2,all points,no ICNF evidence,1173,0.5850374064837905
+conv_final_2016,5,0,best F1,duplicate,0,0.0
+conv_final_2016,5,0,best F1,rekindle record,1,0.0196078431372549
+conv_final_2016,5,0,best F1,earlier fire >= 10 ha,21,0.4117647058823529
+conv_final_2016,5,0,best F1,fire < 10 ha,0,0.0
+conv_final_2016,5,0,best F1,fire in the tail,0,0.0
+conv_final_2016,5,0,best F1,border cell,0,0.0
+conv_final_2016,5,0,best F1,persistent cell,1,0.0196078431372549
+conv_final_2016,5,0,best F1,no ICNF evidence,28,0.5490196078431373
+conv_final_2016,5,0,all points,duplicate,0,0.0
+conv_final_2016,5,0,all points,rekindle record,26,0.01310483870967742
+conv_final_2016,5,0,all points,earlier fire >= 10 ha,213,0.10735887096774194
+conv_final_2016,5,0,all points,fire < 10 ha,161,0.0811491935483871
+conv_final_2016,5,0,all points,fire in the tail,57,0.028729838709677418
+conv_final_2016,5,0,all points,border cell,111,0.05594758064516129
+conv_final_2016,5,0,all points,persistent cell,59,0.029737903225806453
+conv_final_2016,5,0,all points,no ICNF evidence,1357,0.6839717741935484
+conv_final_2016,5,1,best F1,duplicate,0,0.0
+conv_final_2016,5,1,best F1,rekindle record,0,0.0
+conv_final_2016,5,1,best F1,earlier fire >= 10 ha,24,0.42105263157894735
+conv_final_2016,5,1,best F1,fire < 10 ha,0,0.0
+conv_final_2016,5,1,best F1,fire in the tail,1,0.017543859649122806
+conv_final_2016,5,1,best F1,border cell,0,0.0
+conv_final_2016,5,1,best F1,persistent cell,1,0.017543859649122806
+conv_final_2016,5,1,best F1,no ICNF evidence,31,0.543859649122807
+conv_final_2016,5,1,all points,duplicate,0,0.0
+conv_final_2016,5,1,all points,rekindle record,25,0.01256913021618904
+conv_final_2016,5,1,all points,earlier fire >= 10 ha,221,0.1111111111111111
+conv_final_2016,5,1,all points,fire < 10 ha,161,0.08094519859225742
+conv_final_2016,5,1,all points,fire in the tail,50,0.02513826043237808
+conv_final_2016,5,1,all points,border cell,79,0.03971845148315736
+conv_final_2016,5,1,all points,persistent cell,54,0.027149321266968326
+conv_final_2016,5,1,all points,no ICNF evidence,1399,0.7033685268979387
+conv_final_2016,5,2,best F1,duplicate,0,0.0
+conv_final_2016,5,2,best F1,rekindle record,2,0.031746031746031744
+conv_final_2016,5,2,best F1,earlier fire >= 10 ha,21,0.3333333333333333
+conv_final_2016,5,2,best F1,fire < 10 ha,1,0.015873015873015872
+conv_final_2016,5,2,best F1,fire in the tail,1,0.015873015873015872
+conv_final_2016,5,2,best F1,border cell,0,0.0
+conv_final_2016,5,2,best F1,persistent cell,1,0.015873015873015872
+conv_final_2016,5,2,best F1,no ICNF evidence,37,0.5873015873015873
+conv_final_2016,5,2,all points,duplicate,0,0.0
+conv_final_2016,5,2,all points,rekindle record,24,0.011616650532429816
+conv_final_2016,5,2,all points,earlier fire >= 10 ha,223,0.1079380445304937
+conv_final_2016,5,2,all points,fire < 10 ha,161,0.07792836398838335
+conv_final_2016,5,2,all points,fire in the tail,59,0.028557599225556632
+conv_final_2016,5,2,all points,border cell,92,0.044530493707647625
+conv_final_2016,5,2,all points,persistent cell,94,0.04549854791868345
+conv_final_2016,5,2,all points,no ICNF evidence,1413,0.6839303000968054
+conv_final_2016,10,0,best F1,duplicate,1,0.02127659574468085
+conv_final_2016,10,0,best F1,rekindle record,3,0.06382978723404255
+conv_final_2016,10,0,best F1,earlier fire >= 10 ha,21,0.44680851063829785
+conv_final_2016,10,0,best F1,fire < 10 ha,1,0.02127659574468085
+conv_final_2016,10,0,best F1,fire in the tail,0,0.0
+conv_final_2016,10,0,best F1,border cell,0,0.0
+conv_final_2016,10,0,best F1,persistent cell,1,0.02127659574468085
+conv_final_2016,10,0,best F1,no ICNF evidence,20,0.425531914893617
+conv_final_2016,10,0,all points,duplicate,4,0.0020408163265306124
+conv_final_2016,10,0,all points,rekindle record,63,0.03214285714285714
+conv_final_2016,10,0,all points,earlier fire >= 10 ha,319,0.16275510204081634
+conv_final_2016,10,0,all points,fire < 10 ha,212,0.10816326530612246
+conv_final_2016,10,0,all points,fire in the tail,47,0.023979591836734693
+conv_final_2016,10,0,all points,border cell,96,0.04897959183673469
+conv_final_2016,10,0,all points,persistent cell,50,0.025510204081632654
+conv_final_2016,10,0,all points,no ICNF evidence,1169,0.5964285714285714
+conv_final_2016,10,1,best F1,duplicate,0,0.0
+conv_final_2016,10,1,best F1,rekindle record,1,0.02
+conv_final_2016,10,1,best F1,earlier fire >= 10 ha,25,0.5
+conv_final_2016,10,1,best F1,fire < 10 ha,1,0.02
+conv_final_2016,10,1,best F1,fire in the tail,0,0.0
+conv_final_2016,10,1,best F1,border cell,0,0.0
+conv_final_2016,10,1,best F1,persistent cell,1,0.02
+conv_final_2016,10,1,best F1,no ICNF evidence,22,0.44
+conv_final_2016,10,1,all points,duplicate,6,0.0030581039755351682
+conv_final_2016,10,1,all points,rekindle record,63,0.03211009174311927
+conv_final_2016,10,1,all points,earlier fire >= 10 ha,327,0.16666666666666666
+conv_final_2016,10,1,all points,fire < 10 ha,217,0.11060142711518858
+conv_final_2016,10,1,all points,fire in the tail,40,0.020387359836901122
+conv_final_2016,10,1,all points,border cell,66,0.03363914373088685
+conv_final_2016,10,1,all points,persistent cell,47,0.023955147808358817
+conv_final_2016,10,1,all points,no ICNF evidence,1196,0.6095820591233435
+conv_final_2016,10,2,best F1,duplicate,0,0.0
+conv_final_2016,10,2,best F1,rekindle record,3,0.05172413793103448
+conv_final_2016,10,2,best F1,earlier fire >= 10 ha,26,0.4482758620689655
+conv_final_2016,10,2,best F1,fire < 10 ha,2,0.034482758620689655
+conv_final_2016,10,2,best F1,fire in the tail,0,0.0
+conv_final_2016,10,2,best F1,border cell,0,0.0
+conv_final_2016,10,2,best F1,persistent cell,1,0.017241379310344827
+conv_final_2016,10,2,best F1,no ICNF evidence,26,0.4482758620689655
+conv_final_2016,10,2,all points,duplicate,1,0.0004909180166912126
+conv_final_2016,10,2,all points,rekindle record,62,0.03043691703485518
+conv_final_2016,10,2,all points,earlier fire >= 10 ha,325,0.15954835542464407
+conv_final_2016,10,2,all points,fire < 10 ha,212,0.10407461953853707
+conv_final_2016,10,2,all points,fire in the tail,52,0.025527736867943053
+conv_final_2016,10,2,all points,border cell,85,0.041728031418753066
+conv_final_2016,10,2,all points,persistent cell,75,0.036818851251840944
+conv_final_2016,10,2,all points,no ICNF evidence,1225,0.6013745704467354

@@ -1,0 +1,8 @@
+case,period,focus_i,focus_j,detail,n_targets
+"weak signal: found, but scored below the threshold",2025-08-24 06:00:00+00:00,48.04143773073224,46.84415066374606,"65 ha, ICNF 6.8 h, score 0.38 (thr 0.42), 11 det. in 6 h",2
+"next to an active fire: found, but scored below the threshold",2024-09-17 06:00:00+00:00,61.97052695780326,45.44684709425019,"13526 ha, ICNF 5.8 h, score 0.23 (thr 0.42), 145 det. in 6 h",8
+"close pair: two ignitions <= 2 cells apart, one not hit",2025-08-04 06:00:00+00:00,50.232819377936494,46.18116415449711,"185 ha, ICNF 9.8 h, score 0.05 (thr 0.42), 92 det. in 6 h",4
+re-flare: false alarm where it burned in the 72 h before the window,2025-07-31 06:00:00+00:00,40.20920684053317,43.12160340809609,"score 0.52, class 'no ICNF evidence', last activity 4 h before the window",0
+"unexplained false alarm (no ICNF record <= 10 km, no earlier activity)",2025-01-16 06:00:00+00:00,42.13869268789949,57.78255292209042,"score 0.56, class 'no ICNF evidence', no activity in 7 d",0
+"hit, but the model time is >= 3 h off",2024-09-15 06:00:00+00:00,50.149403965163856,35.696430292194464,"ICNF 3.0 h, model 7.0 h",5
+outbreak: the period with the most targets,2024-09-16 06:00:00+00:00,55.201887425403356,43.132759196267045,"27 targets, 15 hit at the threshold",27

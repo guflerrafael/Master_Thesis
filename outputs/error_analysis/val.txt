@@ -1,0 +1,174 @@
+Error analysis on val (dev models, trained without these years)
+   cnn3d_st: AP@5 0.663, AP@10 0.740 (reproduces the stored scores); best-F1 thresholds @ 10 km [0.366, 0.398, 0.435]
+   cnn3d_final: AP@5 0.633, AP@10 0.706 (reproduces the stored scores); best-F1 thresholds @ 10 km [0.463, 0.491, 0.484]
+
+A  Localisation ceiling (targets of the split; detections <= 2 cells in [start - 1 h, start + 6 h))
+   targets 403, with a detection for the oracle 402
+   pixel quantisation (ICNF point -> centre of its cell): median 1.52 km, p25 1.07, p75 1.96; cell 3.18 km E-W x 4.71 km N-S
+   oracle: nearest detected cell centre:                 median 1.61 km, p25 1.09, p75 2.12
+   FRP-weighted centroid of the first detection slot:    median 2.46 km, p25 1.49, p75 3.92; one cell in the first slot for 40%
+   cnn3d_st           hits @  5 km (3 seeds pooled): median 2.02 km, p25 1.25, p75 2.94
+   cnn3d_st           hits @ 10 km (3 seeds pooled): median 2.14 km, p25 1.31, p75 3.38
+   cnn3d_final        hits @  5 km (3 seeds pooled): median 2.00 km, p25 1.26, p75 2.82
+   cnn3d_final        hits @ 10 km (3 seeds pooled): median 2.11 km, p25 1.34, p75 3.17
+   nucleus birth      hits @  5 km: median 2.19 km, p25 1.19, p75 3.03
+   AP (recall with all points) by matching radius k [km]:
+k                                      1.0           1.5           2.0           3.0           4.0           5.0           7.5          10.0          15.0
+method                                                                                                                                                    
+cnn3d_final                    0.017 (0.14)  0.069 (0.28)  0.146 (0.42)  0.373 (0.65)  0.543 (0.77)  0.633 (0.84)  0.688 (0.88)  0.706 (0.9)  0.749 (0.93)
+cnn3d_st                       0.021 (0.17)  0.084 (0.33)  0.171 (0.47)   0.401 (0.7)  0.575 (0.83)  0.663 (0.89)  0.716 (0.93)  0.74 (0.96)  0.774 (0.97)
+nucleus birth                  0.021 (0.14)  0.053 (0.24)  0.103 (0.33)  0.238 (0.53)   0.36 (0.65)  0.448 (0.71)  0.526 (0.76)  0.577 (0.8)  0.631 (0.86)
+oracle: nearest detected cell  0.194 (0.19)  0.437 (0.44)  0.707 (0.71)  0.931 (0.93)  0.973 (0.97)   0.998 (1.0)   0.998 (1.0)  0.998 (1.0)   0.998 (1.0)
+pixel quantisation (bound)     0.211 (0.21)  0.479 (0.48)  0.772 (0.77)     1.0 (1.0)     1.0 (1.0)     1.0 (1.0)     1.0 (1.0)    1.0 (1.0)     1.0 (1.0)
+
+A2 Offset ICNF point - first detected cell, fresh isolated targets with one cell in the first slot, all non-test years (n = 294 of 3142 targets; no model)
+   ICNF point inside the detected cell: 53% (if the fire were always detected in its own cell and the ICNF point were exact: 100 %)
+   east : median +0.14 km, robust SD 1.45 km; pure quantisation SD 0.91 km -> remaining spread (ICNF position + detection in a neighbour cell + fire spread before the first scan) <= 1.13 km
+   south: median +0.74 km, robust SD 1.99 km; pure quantisation SD 1.34 km -> remaining spread (ICNF position + detection in a neighbour cell + fire spread before the first scan) <= 1.48 km
+
+B  Data ceiling: all ICNF fires >= 50 ha of the split (nearest point <= 10 km in the fire's period)
+   fires >= 50 ha 497, seen 403 (81%); burned area seen 89%
+   unseen fires with a detection <= 5 km later in the 24 h window (after start + 6 h): 13 of 94
+   share found with all points / at the operating point, and share of the burned area found (mean of 3 seeds):
+                                 n  found  found_op  area_found  area_found_op  seen_share
+method      group                                                                         
+cnn3d_st    seen             403.0  0.988     0.731       0.998          0.871         NaN
+            unseen            94.0  0.294     0.071       0.453          0.067         NaN
+            all              497.0  0.856     0.606       0.938          0.782         NaN
+            all 50-100 ha    189.0  0.808     0.464         NaN            NaN       0.762
+            all 100-500 ha   228.0  0.871     0.659         NaN            NaN       0.825
+            all 500-1000 ha   47.0  0.915     0.780         NaN            NaN       0.872
+            all 1000-inf ha   33.0  0.949     0.808         NaN            NaN       0.909
+cnn3d_final seen             403.0  0.975     0.681       0.992          0.824         NaN
+            unseen            94.0  0.280     0.067       0.501          0.041         NaN
+            all              497.0  0.844     0.565       0.938          0.737         NaN
+            all 50-100 ha    189.0  0.799     0.434         NaN            NaN       0.762
+            all 100-500 ha   228.0  0.849     0.608         NaN            NaN       0.825
+            all 500-1000 ha   47.0  0.908     0.730         NaN            NaN       0.872
+            all 1000-inf ha   33.0  0.970     0.778         NaN            NaN       0.909
+
+C  Target tensors (labels only, no model): targets with their own peak (one-to-one, <= 1.5 cells, 3D also <= 1.5 h)
+   all: 2D 94.5%, 3D 97.3%
+         mean         size      
+in_pair False  True  False True 
+mode                            
+2d        1.0  0.577   351    52
+3d        1.0  0.788   351    52
+
+D  Operating point and the AP left on the table (k = 5 and 10 km, mean of 3 seeds)
+                R_bestF1  P_bestF1    thr  actual  duplicates neutral  + label definition neutral  + border / persistent neutral  every false alarm neutral (= recall, all points)
+method      k                                                                                                                                                                     
+cnn3d_st    5      0.636     0.713  0.401   0.663               0.666                       0.766                          0.778                                             0.894
+            10     0.675     0.759  0.400   0.740               0.745                       0.874                          0.885                                             0.955
+cnn3d_final 5      0.591     0.747  0.480   0.633               0.633                       0.718                          0.732                                             0.838
+            10     0.627     0.797  0.480   0.706               0.707                       0.821                          0.834                                             0.901
+   cnn3d_st: false alarms above the threshold @ 10 km per period (mean per seed): 87.7 in 85 periods; the 5 busiest periods hold 21%: 2016-09-06 06 UTC 5.3, 2016-08-10 06 UTC 4.0, 2016-08-07 06 UTC 3.7, 2016-08-09 18 UTC 2.7, 2015-08-10 06 UTC 2.3
+   false alarms by nearest ICNF evidence, best F1: share (mean count per seed)
+cls              duplicate rekindle record earlier fire >= 10 ha fire < 10 ha fire in the tail border cell persistent cell no ICNF evidence duplicate: median hours to the found point
+method      k                                                                                                                                                                         
+cnn3d_st    5   0.02 (2.7)     0.18 (19.0)           0.31 (32.3)  0.14 (14.3)       0.03 (3.0)  0.04 (3.7)      0.03 (2.7)      0.26 (27.0)                                 4.74 (2.7)
+            10  0.05 (4.3)     0.25 (22.0)           0.39 (33.0)  0.16 (14.3)       0.02 (1.7)  0.03 (2.7)      0.02 (1.7)       0.09 (8.0)                                 4.58 (4.3)
+cnn3d_final 5    0.0 (0.0)     0.18 (14.7)           0.33 (26.3)  0.14 (11.3)       0.02 (1.3)  0.05 (4.0)      0.02 (2.0)      0.26 (21.0)                                        NaN
+            10  0.01 (0.3)     0.25 (16.3)           0.39 (25.3)  0.17 (11.0)       0.03 (2.0)  0.05 (3.3)      0.01 (0.7)       0.08 (5.3)                                        NaN
+   false alarms by nearest ICNF evidence, all points: share (mean count per seed)
+cls                duplicate rekindle record earlier fire >= 10 ha  fire < 10 ha fire in the tail   border cell persistent cell no ICNF evidence
+method      k                                                                                                                                   
+cnn3d_st    5   0.05 (147.3)    0.04 (137.0)          0.16 (531.3)  0.16 (517.3)     0.03 (102.0)  0.06 (179.7)    0.04 (116.0)    0.46 (1500.7)
+            10  0.06 (186.7)    0.09 (285.7)          0.23 (704.0)  0.19 (597.3)      0.02 (62.0)  0.05 (140.7)     0.03 (85.0)    0.33 (1030.7)
+cnn3d_final 5      0.0 (0.0)    0.04 (109.3)           0.2 (532.3)  0.14 (374.7)      0.03 (67.0)  0.06 (156.7)     0.03 (87.7)    0.51 (1454.0)
+            10     0.0 (7.7)    0.08 (218.3)          0.25 (660.7)  0.18 (467.0)      0.02 (43.0)  0.05 (129.3)     0.03 (67.3)    0.39 (1099.7)
+
+E  Misses at the operating point (best F1 @ 10 km), mean of 3 seeds
+   targets per outcome (mean count per seed):
+cat          found below the threshold    hit  no point within 10 km  point taken by another target
+method                                                                                             
+cnn3d_final                      110.3  252.7                   11.0                           29.0
+cnn3d_st                         113.0  272.0                    5.0                           13.0
+   cnn3d_st: recall at the operating point / with all points, by subgroup and signal (3 seeds pooled):
+                                                                 targets  recall @ best F1  recall all points  median score of the match
+period                                            06-18 UTC      301.000             0.698              0.946                      0.512
+                                                  18-06 UTC      102.000             0.608              0.984                      0.446
+period x start [h]                                day [0, 3)      16.000             0.396              0.958                      0.370
+                                                  day [3, 6)      59.000             0.695              0.955                      0.484
+                                                  day [6, 9)     147.000             0.776              0.961                      0.538
+                                                  day [9, 12)     79.000             0.616              0.907                      0.505
+                                                  night [0, 3)    37.000             0.559              0.991                      0.433
+                                                  night [3, 6)    38.000             0.667              0.974                      0.465
+                                                  night [6, 9)    15.000             0.600              1.000                      0.451
+                                                  night [9, 12)   12.000             0.583              0.972                      0.431
+isolated                                          False          304.000             0.645              0.941                      0.483
+                                                  True            99.000             0.768              1.000                      0.531
+in_pair                                           False          351.000             0.714              0.988                      0.503
+                                                  True            52.000             0.410              0.737                      0.416
+already_burning                                   False          309.000             0.740              0.984                      0.515
+                                                  True            94.000             0.461              0.862                      0.413
+seen only via an older nucleus                    False          317.000             0.739              0.987                      0.516
+                                                  True            86.000             0.438              0.837                      0.400
+size_class                                        100–500        188.000             0.723              0.950                      0.505
+                                                  500–1k          41.000             0.837              1.000                      0.579
+                                                  50–100         144.000             0.530              0.947                      0.416
+                                                  ≥1k             30.000             0.844              0.967                      0.570
+rekindle                                          False          356.000             0.685              0.961                      0.498
+                                                  True            47.000             0.596              0.915                      0.462
+ICNF start in the period [h]                      [0, 3)          53.000             0.509              0.981                      0.396
+                                                  [3, 6)          97.000             0.684              0.962                      0.477
+                                                  [6, 9)         162.000             0.759              0.965                      0.531
+                                                  [9, 12)         91.000             0.612              0.916                      0.495
+detections <= 1.5 cells in the first 6 h          0                4.000             0.000              0.833                      0.138
+                                                  1-2             30.000             0.144              0.889                      0.239
+                                                  11-20           57.000             0.678              0.942                      0.453
+                                                  3-5             27.000             0.173              1.000                      0.305
+                                                  6-10            37.000             0.477              0.955                      0.395
+                                                  > 20           248.000             0.833              0.964                      0.555
+FRE <= 1.5 cells in the window [GJ]               q1 (low)       101.000             0.257              0.954                      0.314
+                                                  q2             100.667             0.781              0.957                      0.501
+                                                  q3             100.667             0.864              0.964                      0.555
+                                                  q4 (high)      100.667             0.798              0.947                      0.570
+first detection after the ICNF start [h]          0.5-1           61.000             0.831              1.000                      0.536
+                                                  1-2             47.000             0.688              0.965                      0.465
+                                                  2-4             40.000             0.475              0.983                      0.378
+                                                  <= 0.5         234.000             0.672              0.937                      0.510
+                                                  > 4             21.000             0.603              0.952                      0.443
+burned <= 1.5 cells before the window (up to 7 d) 1-3 d           31.000             0.710              0.957                      0.466
+                                                  3-7 d           39.000             0.761              0.983                      0.547
+                                                  not in 7 d     238.000             0.721              0.973                      0.516
+                                                  within 24 h     95.000             0.512              0.898                      0.440
+   FRE quartile edges [GJ]: [1081.7, 3484.8, 9077.3]
+   cnn3d_st misses at the operating point by primary reason (mean count per seed, of 131.0):
+weak signal (<= 5 detections in 6 h or FRE in the lowest quartile)      55.3  (42 %)
+next to an active fire (already burning / seen via an older nucleus)    28.3  (22 %)
+close pair (<= 2 cells, same period)                                    17.0  (13 %)
+point taken by another target                                           13.0  (10 %)
+other (strong, fresh signal, scored low)                                  8.3  (6 %)
+no point within 10 km                                                     5.0  (4 %)
+detected > 2 h after the ICNF start                                       4.0  (3 %)
+
+F  Ranking: what separates hits from false alarms (all points, k = 10 km, 3 seeds pooled)
+   cnn3d_st: AUC score 0.939; FRE alone 0.775; detections alone 0.770; hours with detections 0.717
+      median FRE [GJ]: hits 4203, false alarms 328; above the threshold: hits 5477, false alarms 3519
+      share with activity in the 6 h history: hits 0.13, false alarms 0.28
+      false alarms above the threshold with FRE above the median FRE of the hits: 0.41
+      hits (all)             burned <= 1.5 cells before the window (not in the input): within 24 h 0.53, 1-3 d 0.23, 3-7 d 0.24, not in 7 d 0.58
+      false alarms (all)     burned <= 1.5 cells before the window (not in the input): within 24 h 0.66, 1-3 d 0.19, 3-7 d 0.15, not in 7 d 0.45
+      hits above thr         burned <= 1.5 cells before the window (not in the input): within 24 h 0.46, 1-3 d 0.28, 3-7 d 0.27, not in 7 d 0.62
+      false alarms above thr burned <= 1.5 cells before the window (not in the input): within 24 h 0.67, 1-3 d 0.22, 3-7 d 0.11, not in 7 d 0.38
+   cnn3d_final: AUC score 0.945; FRE alone 0.843; detections alone 0.838; hours with detections 0.802
+      median FRE [GJ]: hits 4030, false alarms 189; above the threshold: hits 5459, false alarms 3807
+      share with activity in the 6 h history: hits 0.11, false alarms 0.34
+      false alarms above the threshold with FRE above the median FRE of the hits: 0.47
+      hits (all)             burned <= 1.5 cells before the window (not in the input): within 24 h 0.52, 1-3 d 0.22, 3-7 d 0.26, not in 7 d 0.60
+      false alarms (all)     burned <= 1.5 cells before the window (not in the input): within 24 h 0.63, 1-3 d 0.21, 3-7 d 0.16, not in 7 d 0.52
+      hits above thr         burned <= 1.5 cells before the window (not in the input): within 24 h 0.44, 1-3 d 0.26, 3-7 d 0.30, not in 7 d 0.63
+      false alarms above thr burned <= 1.5 cells before the window (not in the input): within 24 h 0.64, 1-3 d 0.23, 3-7 d 0.14, not in 7 d 0.36
+   cnn3d_st: AUC of the score, hits vs false alarms of each class: duplicate 0.95; rekindle record 0.90; earlier fire >= 10 ha 0.93; fire < 10 ha 0.93; fire in the tail 0.96; border cell 0.96; persistent cell 0.95; no ICNF evidence 0.95
+   cnn3d_final: AUC of the score, hits vs false alarms of each class: duplicate 0.89; rekindle record 0.89; earlier fire >= 10 ha 0.94; fire < 10 ha 0.93; fire in the tail 0.94; border cell 0.95; persistent cell 0.94; no ICNF evidence 0.96
+   cnn3d_st hits by ICNF start hour in the period: median score, share above the threshold
+              hits  median score  above threshold
+start_bin                                        
+[0, 3)      52.000         0.396            0.519
+[3, 6)      93.333         0.477            0.711
+[6, 9)     156.333         0.531            0.787
+[9, 12)     83.333         0.495            0.668
+   cnn3d_st hits: Spearman(score, log burned area) 0.34; Spearman(score, log FRE at the point) 0.52
+
+written: outputs/error_analysis/val_*.csv

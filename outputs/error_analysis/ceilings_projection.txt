@@ -1,0 +1,7 @@
+Labels-only projection, all non-test years (no model):
+   in-pair targets (<= 2 SEVIRI cells apart) with their own peak in ONE 2D map, SEVIRI grid (3 km sampling): 59.3% of 339
+   in-pair targets (<= 2 SEVIRI cells apart) with their own peak in ONE 2D map, 3x finer grid (1 km, MTG FCI 3.8 um): 88.8% of 339
+   pixel quantisation, median distance ICNF point -> cell centre: SEVIRI 1.51 km; a 3x finer grid with the same geometry 0.50 km (scales with the cell size)
+   if the ICNF position error had per-axis SD 1.13 / 1.48 km (upper bound (remaining spread of A2)), a perfect estimate would still be a median 1.53 km from the ICNF point
+   if the ICNF position error had per-axis SD 0.56 / 0.74 km (half of it), a perfect estimate would still be a median 0.76 km from the ICNF point
+figures: figures/error_analysis/ceilings_{radius,ap,errors,signal}.png
